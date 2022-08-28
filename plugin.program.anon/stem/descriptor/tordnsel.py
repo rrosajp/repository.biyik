@@ -80,11 +80,12 @@ class TorDNSEL(Descriptor):
       value, block_type, block_content = values[0]
 
       if validate and block_content:
-        raise ValueError('Unexpected block content: %s' % block_content)
+        raise ValueError(f'Unexpected block content: {block_content}')
 
       if keyword == 'ExitNode':
         if validate and not stem.util.tor_tools.is_valid_fingerprint(value):
-          raise ValueError('Tor relay fingerprints consist of forty hex digits: %s' % value)
+          raise ValueError(
+              f'Tor relay fingerprints consist of forty hex digits: {value}')
 
         self.fingerprint = value
       elif keyword == 'Published':
@@ -107,7 +108,7 @@ class TorDNSEL(Descriptor):
             if not stem.util.connection.is_valid_ipv4_address(address):
               raise ValueError("ExitAddress isn't a valid IPv4 address: %s" % address)
             elif block_content:
-              raise ValueError('Unexpected block content: %s' % block_content)
+              raise ValueError(f'Unexpected block content: {block_content}')
 
           try:
             date = stem.util.str_tools._parse_timestamp(date)
@@ -116,4 +117,4 @@ class TorDNSEL(Descriptor):
             if validate:
               raise ValueError("ExitAddress found time wasn't parsable: %s" % value)
       elif validate:
-        raise ValueError('Unrecognized keyword: %s' % keyword)
+        raise ValueError(f'Unrecognized keyword: {keyword}')

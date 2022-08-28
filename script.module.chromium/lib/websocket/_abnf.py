@@ -53,10 +53,7 @@ except ImportError:
         for i in range(len(_d)):
             _d[i] ^= _m[i % 4]
 
-        if six.PY3:
-            return _d.tobytes()
-        else:
-            return _d.tostring()
+        return _d.tobytes() if six.PY3 else _d.tostring()
 
 
 __all__ = [
@@ -181,8 +178,7 @@ class ABNF(object):
             if l > 2 and not skip_utf8_validation and not validate_utf8(self.data[2:]):
                 raise WebSocketProtocolException("Invalid close frame.")
 
-            code = 256 * \
-                six.byte2int(self.data[0:1]) + six.byte2int(self.data[1:2])
+            code = (256 * six.byte2int(self.data[:1])) + six.byte2int(self.data[1:2])
             if not self._is_valid_close_status(code):
                 raise WebSocketProtocolException("Invalid close opcode.")
 
@@ -191,9 +187,9 @@ class ABNF(object):
         return code in VALID_CLOSE_STATUS or (3000 <= code < 5000)
 
     def __str__(self):
-        return "fin=" + str(self.fin) \
-            + " opcode=" + str(self.opcode) \
-            + " data=" + str(self.data)
+        return (
+            (f"fin={str(self.fin)}" + " opcode=") + str(self.opcode) + " data="
+        ) + str(self.data)
 
     @staticmethod
     def create_frame(data, opcode, fin=1):
@@ -245,9 +241,8 @@ class ABNF(object):
 
         if not self.mask:
             return frame_header + self.data
-        else:
-            mask_key = self.get_mask_key(4)
-            return frame_header + self._get_masked(mask_key)
+        mask_key = self.get_mask_key(4)
+        return frame_header + self._get_masked(mask_key)
 
     def _get_masked(self, mask_key):
         s = ABNF.mask(mask_key, self.data)
@@ -286,9 +281,7 @@ class ABNF(object):
             data += bytes(" " * (4 - (len(data) % 4)), "us-ascii")
             a = numpy.frombuffer(data, dtype="uint32")
             masked = numpy.bitwise_xor(a, [_mask_key]).astype("uint32")
-            if len(data) > origlen:
-                return masked.tobytes()[:origlen]
-            return masked.tobytes()
+            return masked.tobytes()[:origlen] if len(data) > origlen else masked.tobytes()
         else:
             _m = array.array("B", mask_key)
             _d = array.array("B", data)
@@ -339,9 +332,7 @@ class frame_buffer(object):
         self.header = (fin, rsv1, rsv2, rsv3, opcode, has_mask, length_bits)
 
     def has_mask(self):
-        if not self.header:
-            return False
-        return self.header[frame_buffer._HEADER_MASK_INDEX]
+        return self.header[frame_buffer._HEADER_MASK_INDEX] if self.header else False
 
     def has_received_length(self):
         return self.length is None
@@ -452,7 +443,6 @@ class continuous_frame(object):
         self.cont_data = None
         frame.data = data[1]
         if not self.fire_cont_frame and data[0] == ABNF.OPCODE_TEXT and not self.skip_utf8_validation and not validate_utf8(frame.data):
-            raise WebSocketPayloadException(
-                "cannot decode: " + repr(frame.data))
+            raise WebSocketPayloadException(f"cannot decode: {repr(frame.data)}")
 
         return [data[0], frame]

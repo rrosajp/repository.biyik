@@ -41,7 +41,7 @@ def check_requirements():
     requirements
   """
 
-  major_version, minor_version = sys.version_info[0:2]
+  major_version, minor_version = sys.version_info[:2]
 
   if major_version < 2 or (major_version == 2 and minor_version < 6):
     raise ImportError('stem requires python version 2.6 or greater')
@@ -55,7 +55,7 @@ def _is_python_26():
   :returns: **True** if we're running python 2.6, **False** otherwise
   """
 
-  major_version, minor_version = sys.version_info[0:2]
+  major_version, minor_version = sys.version_info[:2]
 
   return major_version == 2 and minor_version == 6
 
@@ -70,7 +70,7 @@ def is_python_27():
   :returns: **True** if we meet this requirement and **False** otherwise
   """
 
-  major_version, minor_version = sys.version_info[0:2]
+  major_version, minor_version = sys.version_info[:2]
 
   return major_version > 2 or (major_version == 2 and minor_version >= 7)
 
@@ -232,7 +232,7 @@ def _is_lru_cache_available():
   due to a buggy implementation. (:trac:`26412`)
   """
 
-  major_version, minor_version = sys.version_info[0:2]
+  major_version, minor_version = sys.version_info[:2]
 
   if major_version == 3 and minor_version == 5:
     return False
@@ -257,6 +257,5 @@ def _is_crypto_ed25519_supported():
 
   if hasattr(backend, 'ed25519_supported') and backend.ed25519_supported():
     return True
-  else:
-    log.log_once('stem.prereq._is_crypto_ed25519_supported', log.INFO, ED25519_UNSUPPORTED)
-    return False
+  log.log_once('stem.prereq._is_crypto_ed25519_supported', log.INFO, ED25519_UNSUPPORTED)
+  return False

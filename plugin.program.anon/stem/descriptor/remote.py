@@ -455,11 +455,7 @@ class Query(object):
       else:
         raise ValueError("'%s' (%s) is not a recognized type of compression" % (legacy_compression, type(legacy_compression).__name__))
 
-    if descriptor_type:
-      self.descriptor_type = descriptor_type
-    else:
-      self.descriptor_type = _guess_descriptor_type(resource)
-
+    self.descriptor_type = descriptor_type or _guess_descriptor_type(resource)
     self.endpoints = []
 
     if endpoints:
@@ -553,27 +549,16 @@ class Query(object):
           raise ValueError('BUG: _download_descriptors() finished without either results or an error')
 
         try:
-          # TODO: special handling until we have an official detatched
-          # signature @type...
-          #
-          #   https://trac.torproject.org/projects/tor/ticket/28615
-
-          if self.descriptor_type.startswith(DETACHED_SIGNATURE_TYPE):
-            results = stem.descriptor.networkstatus._parse_file_detached_sigs(
+          yield from stem.descriptor.networkstatus._parse_file_detached_sigs(
               io.BytesIO(self.content),
-              validate = self.validate,
-            )
-          else:
-            results = stem.descriptor.parse_file(
-              io.BytesIO(self.content),
-              self.descriptor_type,
-              validate = self.validate,
-              document_handler = self.document_handler,
-              **self.kwargs
-            )
-
-          for desc in results:
-            yield desc
+              validate=self.validate,
+          ) if self.descriptor_type.startswith(
+              DETACHED_SIGNATURE_TYPE) else stem.descriptor.parse_file(
+                  io.BytesIO(self.content),
+                  self.descriptor_type,
+                  validate=self.validate,
+                  document_handler=self.document_handler,
+                  **self.kwargs)
         except ValueError as exc:
           self.error = exc  # encountered a parsing error
 
@@ -583,8 +568,7 @@ class Query(object):
           raise self.error
 
   def __iter__(self):
-    for desc in self._run(True):
-      yield desc
+    yield from self._run(True)
 
   def _pick_endpoint(self, use_authority = False):
     """
@@ -598,11 +582,10 @@ class Query(object):
       from by this request
     """
 
-    if use_authority or not self.endpoints:
-      picked = random.choice([auth for auth in stem.directory.Authority.from_cache().values() if auth.nickname not in DIR_PORT_BLACKLIST])
-      return stem.DirPort(picked.address, picked.dir_port)
-    else:
+    if not use_authority and self.endpoints:
       return random.choice(self.endpoints)
+    picked = random.choice([auth for auth in stem.directory.Authority.from_cache().values() if auth.nickname not in DIR_PORT_BLACKLIST])
+    return stem.DirPort(picked.address, picked.dir_port)
 
   def _download_descriptors(self, retries, timeout):
     try:
@@ -610,7 +593,7 @@ class Query(object):
       endpoint = self._pick_endpoint(use_authority = retries == 0 and self.fall_back_to_authority)
 
       if isinstance(endpoint, stem.ORPort):
-        downloaded_from = 'ORPort %s:%s (resource %s)' % (endpoint.address, endpoint.port, self.resource)
+        downloaded_from = f'ORPort {endpoint.address}:{endpoint.port} (resource {self.resource})'
         self.content, self.reply_headers = _download_from_orport(endpoint, self.compression, self.resource)
       elif isinstance(endpoint, stem.DirPort):
         self.download_url = 'http://%s:%i/%s' % (endpoint.address, endpoint.port, self.resource.lstrip('/'))
@@ -660,7 +643,7 @@ class DescriptorDownloader(object):
         self.use_directory_mirrors()
         log.debug('Retrieved directory mirrors (took %0.2fs)' % (time.time() - start_time))
       except Exception as exc:
-        log.debug('Unable to retrieve directory mirrors: %s' % exc)
+        log.debug(f'Unable to retrieve directory mirrors: {exc}')
 
   def use_directory_mirrors(self):
     """
@@ -674,7 +657,8 @@ class DescriptorDownloader(object):
     """
 
     directories = [auth for auth in stem.directory.Authority.from_cache().values() if auth.nickname not in DIR_PORT_BLACKLIST]
-    new_endpoints = set([(directory.address, directory.dir_port) for directory in directories])
+    new_endpoints = {(directory.address, directory.dir_port)
+                     for directory in directories}
 
     consensus = list(self.get_consensus(document_handler = stem.descriptor.DocumentHandler.DOCUMENT).run())[0]
 
@@ -728,7 +712,7 @@ class DescriptorDownloader(object):
       if len(fingerprints) > MAX_FINGERPRINTS:
         raise ValueError('Unable to request more than %i descriptors at a time by their fingerprints' % MAX_FINGERPRINTS)
 
-      resource = '/tor/server/fp/%s' % '+'.join(fingerprints)
+      resource = f"/tor/server/fp/{'+'.join(fingerprints)}"
 
     return self.query(resource, **query_args)
 
@@ -758,7 +742,7 @@ class DescriptorDownloader(object):
       if len(fingerprints) > MAX_FINGERPRINTS:
         raise ValueError('Unable to request more than %i descriptors at a time by their fingerprints' % MAX_FINGERPRINTS)
 
-      resource = '/tor/extra/fp/%s' % '+'.join(fingerprints)
+      resource = f"/tor/extra/fp/{'+'.join(fingerprints)}"
 
     return self.query(resource, **query_args)
 
@@ -806,7 +790,7 @@ class DescriptorDownloader(object):
     if len(hashes) > MAX_MICRODESCRIPTOR_HASHES:
       raise ValueError('Unable to request more than %i microdescriptors at a time by their hashes' % MAX_MICRODESCRIPTOR_HASHES)
 
-    return self.query('/tor/micro/d/%s' % '-'.join(hashes), **query_args)
+    return self.query(f"/tor/micro/d/{'-'.join(hashes)}", **query_args)
 
   def get_consensus(self, authority_v3ident = None, microdescriptor = False, **query_args):
     """
@@ -834,7 +818,7 @@ class DescriptorDownloader(object):
       resource = '/tor/status-vote/current/consensus'
 
     if authority_v3ident:
-      resource += '/%s' % authority_v3ident
+      resource += f'/{authority_v3ident}'
 
     consensus_query = self.query(resource, **query_args)
 
@@ -896,7 +880,7 @@ class DescriptorDownloader(object):
       if len(authority_v3idents) > MAX_FINGERPRINTS:
         raise ValueError('Unable to request more than %i key certificates at a time by their identity fingerprints' % MAX_FINGERPRINTS)
 
-      resource = '/tor/keys/fp/%s' % '+'.join(authority_v3idents)
+      resource = f"/tor/keys/fp/{'+'.join(authority_v3idents)}"
 
     return self.query(resource, **query_args)
 
@@ -987,9 +971,7 @@ class DescriptorDownloader(object):
       type can't be determined when 'descriptor_type' is **None**
     """
 
-    args = dict(self._default_args)
-    args.update(query_args)
-
+    args = dict(self._default_args) | query_args
     if 'endpoints' not in args:
       args['endpoints'] = self._endpoints
 
@@ -1025,15 +1007,15 @@ def _download_from_orport(endpoint, compression, resource):
     * :class:`stem.SocketError` if unable to establish a connection
   """
 
-  link_protocols = endpoint.link_protocols if endpoint.link_protocols else [3]
+  link_protocols = endpoint.link_protocols or [3]
 
   with stem.client.Relay.connect(endpoint.address, endpoint.port, link_protocols) as relay:
     with relay.create_circuit() as circ:
-      request = '\r\n'.join((
-        'GET %s HTTP/1.0' % resource,
-        'Accept-Encoding: %s' % ', '.join(map(lambda c: c.encoding, compression)),
-        'User-Agent: %s' % stem.USER_AGENT,
-      )) + '\r\n\r\n'
+      request = ('\r\n'.join((
+          f'GET {resource} HTTP/1.0',
+          f"Accept-Encoding: {', '.join(map(lambda c: c.encoding, compression))}",
+          f'User-Agent: {stem.USER_AGENT}',
+      )) + '\r\n\r\n')
 
       response = circ.directory(request, stream_id = 1)
       first_line, data = response.split(b'\r\n', 1)
@@ -1139,7 +1121,7 @@ def _guess_descriptor_type(resource):
     elif resource.endswith('/consensus-microdesc'):
       return 'network-status-microdesc-consensus-3 1.0'
     elif resource.endswith('/consensus-signatures'):
-      return '%s 1.0' % DETACHED_SIGNATURE_TYPE
+      return f'{DETACHED_SIGNATURE_TYPE} 1.0'
     elif stem.util.tor_tools.is_valid_fingerprint(resource.split('/')[-1]):
       return 'network-status-consensus-3 1.0'
     elif resource.endswith('/bandwidth'):

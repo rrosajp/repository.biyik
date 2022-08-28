@@ -52,13 +52,13 @@ class proxy_info(object):
 
     def __init__(self, **options):
         self.type = options.get("proxy_type") or "http"
-        if not(self.type in ['http', 'socks4', 'socks5', 'socks5h']):
+        if self.type not in ['http', 'socks4', 'socks5', 'socks5h']:
             raise ValueError("proxy_type must be 'http', 'socks4', 'socks5' or 'socks5h'")
-        self.host = options.get("http_proxy_host", None)
+        self.host = options.get("http_proxy_host")
         if self.host:
             self.port = options.get("http_proxy_port", 0)
-            self.auth = options.get("http_proxy_auth", None)
-            self.no_proxy = options.get("http_no_proxy", None)
+            self.auth = options.get("http_proxy_auth")
+            self.no_proxy = options.get("http_no_proxy")
         else:
             self.port = 0
             self.auth = None
@@ -72,14 +72,11 @@ def _open_proxied_socket(url, options, proxy):
         raise WebSocketException("PySocks module not found.")
 
     ptype = socks.SOCKS5
-    rdns = False
-    if proxy.type == "socks4":
-        ptype = socks.SOCKS4
     if proxy.type == "http":
         ptype = socks.HTTP
-    if proxy.type[-1] == "h":
-        rdns = True
-
+    elif proxy.type == "socks4":
+        ptype = socks.SOCKS4
+    rdns = proxy.type[-1] == "h"
     sock = socks.create_connection(
         (hostname, port),
         proxy_type=ptype,
@@ -102,7 +99,7 @@ def _open_proxied_socket(url, options, proxy):
 
 
 def connect(url, options, proxy, socket):
-    if proxy.host and not socket and not (proxy.type == 'http'):
+    if proxy.host and not socket and proxy.type != 'http':
         return _open_proxied_socket(url, options, proxy)
 
     hostname, port, resource, is_secure = parse_url(url)
@@ -113,8 +110,7 @@ def connect(url, options, proxy, socket):
     addrinfo_list, need_tunnel, auth = _get_addrinfo_list(
         hostname, port, is_secure, proxy)
     if not addrinfo_list:
-        raise WebSocketException(
-            "Host not found.: " + hostname + ":" + str(port))
+        raise WebSocketException(f"Host not found.: {hostname}:{str(port)}")
 
     sock = None
     try:
@@ -246,16 +242,20 @@ def _wrap_sni_socket(sock, sslopt, hostname, check_hostname):
 
 def _ssl_socket(sock, user_sslopt, hostname):
     sslopt = dict(cert_reqs=ssl.CERT_REQUIRED)
-    sslopt.update(user_sslopt)
+    sslopt |= user_sslopt
 
-    certPath = os.environ.get('WEBSOCKET_CLIENT_CA_BUNDLE')
-    if certPath and os.path.isfile(certPath) \
-            and user_sslopt.get('ca_certs', None) is None \
-            and user_sslopt.get('ca_cert', None) is None:
-        sslopt['ca_certs'] = certPath
-    elif certPath and os.path.isdir(certPath) \
-            and user_sslopt.get('ca_cert_path', None) is None:
-        sslopt['ca_cert_path'] = certPath
+    if certPath := os.environ.get('WEBSOCKET_CLIENT_CA_BUNDLE'):
+        if (
+            os.path.isfile(certPath)
+            and user_sslopt.get('ca_certs', None) is None
+            and user_sslopt.get('ca_cert', None) is None
+        ):
+            sslopt['ca_certs'] = certPath
+        elif (
+            os.path.isdir(certPath)
+            and user_sslopt.get('ca_cert_path', None) is None
+        ):
+            sslopt['ca_cert_path'] = certPath
 
     check_hostname = sslopt["cert_reqs"] != ssl.CERT_NONE and sslopt.pop(
         'check_hostname', True)
@@ -281,7 +281,7 @@ def _tunnel(sock, host, port, auth):
     if auth and auth[0]:
         auth_str = auth[0]
         if auth[1]:
-            auth_str += ":" + auth[1]
+            auth_str += f":{auth[1]}"
         encoded_str = base64encode(auth_str.encode()).strip().decode().replace('\n', '')
         connect_header += "Proxy-Authorization: Basic %s\r\n" % encoded_str
     connect_header += "\r\n"
@@ -321,15 +321,14 @@ def read_headers(sock):
                 status_message = status_info[2]
         else:
             kv = line.split(":", 1)
-            if len(kv) == 2:
-                key, value = kv
-                if key.lower() == "set-cookie" and headers.get("set-cookie"):
-                    headers["set-cookie"] = headers.get("set-cookie") + "; " + value.strip()
-                else:
-                    headers[key.lower()] = value.strip()
-            else:
+            if len(kv) != 2:
                 raise WebSocketException("Invalid header")
 
+            key, value = kv
+            if key.lower() == "set-cookie" and headers.get("set-cookie"):
+                headers["set-cookie"] = headers.get("set-cookie") + "; " + value.strip()
+            else:
+                headers[key.lower()] = value.strip()
     trace("-----------------------")
 
     return status, headers, status_message

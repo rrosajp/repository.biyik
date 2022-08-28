@@ -21,12 +21,13 @@ Copyright (C) 2010 Hiroki Ohtani(liris)
 
 """
 
+
 import os
 import os.path
 import websocket as ws
 from websocket._http import proxy_info, read_headers, _open_proxied_socket, _tunnel
 import sys
-sys.path[0:0] = [""]
+sys.path[:0] = [""]
 
 if sys.version_info[0] == 2 and sys.version_info[1] < 7:
     import unittest2 as unittest

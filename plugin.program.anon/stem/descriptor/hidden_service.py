@@ -162,11 +162,13 @@ def _parse_protocol_versions_line(descriptor, entries):
   try:
     versions = [int(entry) for entry in value.split(',')]
   except ValueError:
-    raise ValueError('protocol-versions line has non-numeric versoins: protocol-versions %s' % value)
+    raise ValueError(
+        f'protocol-versions line has non-numeric versoins: protocol-versions {value}'
+    )
 
   for v in versions:
     if v <= 0:
-      raise ValueError('protocol-versions must be positive integers: %s' % value)
+      raise ValueError(f'protocol-versions must be positive integers: {value}')
 
   descriptor.protocol_versions = versions
 
@@ -272,7 +274,7 @@ class HiddenServiceDescriptorV2(BaseHiddenServiceDescriptor):
   @classmethod
   def content(cls, attr = None, exclude = (), sign = False):
     if sign:
-      raise NotImplementedError('Signing of %s not implemented' % cls.__name__)
+      raise NotImplementedError(f'Signing of {cls.__name__} not implemented')
 
     return _descriptor_content(attr, exclude, (
       ('rendezvous-service-descriptor', 'y3olqqblqw2gbh6phimfuiroechjjafa'),
@@ -298,12 +300,12 @@ class HiddenServiceDescriptorV2(BaseHiddenServiceDescriptor):
       for keyword in REQUIRED_V2_FIELDS:
         if keyword not in entries:
           raise ValueError("Hidden service descriptor must have a '%s' entry" % keyword)
-        elif keyword in entries and len(entries[keyword]) > 1:
+        elif len(entries[keyword]) > 1:
           raise ValueError("The '%s' entry can only appear once in a hidden service descriptor" % keyword)
 
-      if 'rendezvous-service-descriptor' != list(entries.keys())[0]:
+      if list(entries.keys())[0] != 'rendezvous-service-descriptor':
         raise ValueError("Hidden service descriptor must start with a 'rendezvous-service-descriptor' entry")
-      elif 'signature' != list(entries.keys())[-1]:
+      elif list(entries.keys())[-1] != 'signature':
         raise ValueError("Hidden service descriptor must end with a 'signature' entry")
 
       self._parse(entries, validate)
@@ -314,7 +316,9 @@ class HiddenServiceDescriptorV2(BaseHiddenServiceDescriptor):
         content_digest = hashlib.sha1(digest_content).hexdigest().upper()
 
         if signed_digest != content_digest:
-          raise ValueError('Decrypted digest does not match local digest (calculated: %s, local: %s)' % (signed_digest, content_digest))
+          raise ValueError(
+              f'Decrypted digest does not match local digest (calculated: {signed_digest}, local: {content_digest})'
+          )
     else:
       self._entries = entries
 
@@ -342,9 +346,10 @@ class HiddenServiceDescriptorV2(BaseHiddenServiceDescriptor):
         missing_padding = len(authentication_cookie) % 4
         authentication_cookie = base64.b64decode(stem.util.str_tools._to_bytes(authentication_cookie) + b'=' * missing_padding)
       except TypeError as exc:
-        raise DecryptionFailure('authentication_cookie must be a base64 encoded string (%s)' % exc)
+        raise DecryptionFailure(
+            f'authentication_cookie must be a base64 encoded string ({exc})')
 
-      authentication_type = int(binascii.hexlify(content[0:1]), 16)
+      authentication_type = int(binascii.hexlify(content[:1]), 16)
 
       if authentication_type == BASIC_AUTH:
         content = HiddenServiceDescriptorV2._decrypt_basic_auth(content, authentication_cookie)
@@ -511,7 +516,7 @@ class HiddenServiceDescriptorV3(BaseHiddenServiceDescriptor):
   @classmethod
   def content(cls, attr = None, exclude = (), sign = False):
     if sign:
-      raise NotImplementedError('Signing of %s not implemented' % cls.__name__)
+      raise NotImplementedError(f'Signing of {cls.__name__} not implemented')
 
     return _descriptor_content(attr, exclude, (
       ('hs-descriptor', '3'),
@@ -534,12 +539,12 @@ class HiddenServiceDescriptorV3(BaseHiddenServiceDescriptor):
       for keyword in REQUIRED_V3_FIELDS:
         if keyword not in entries:
           raise ValueError("Hidden service descriptor must have a '%s' entry" % keyword)
-        elif keyword in entries and len(entries[keyword]) > 1:
+        elif len(entries[keyword]) > 1:
           raise ValueError("The '%s' entry can only appear once in a hidden service descriptor" % keyword)
 
-      if 'hs-descriptor' != list(entries.keys())[0]:
+      if list(entries.keys())[0] != 'hs-descriptor':
         raise ValueError("Hidden service descriptor must start with a 'hs-descriptor' entry")
-      elif 'signature' != list(entries.keys())[-1]:
+      elif list(entries.keys())[-1] != 'signature':
         raise ValueError("Hidden service descriptor must end with a 'signature' entry")
 
       self._parse(entries, validate)

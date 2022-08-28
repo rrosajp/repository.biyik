@@ -145,7 +145,9 @@ class _IntegerEnum(stem.util.enum.Enum):
       elif len(entry) == 3:
         enum, str_val, int_val = entry
       else:
-        raise ValueError('IntegerEnums can only be constructed with two or three value tuples: %s' % repr(entry))
+        raise ValueError(
+            f'IntegerEnums can only be constructed with two or three value tuples: {repr(entry)}'
+        )
 
       self._enum_to_int[str_val] = int_val
       self._int_to_enum[int_val] = str_val
@@ -307,7 +309,8 @@ class Field(object):
     unpacked, remainder = cls.pop(packed)
 
     if remainder:
-      raise ValueError('%s is the wrong size for a %s field' % (repr(packed), cls.__name__))
+      raise ValueError(
+          f'{repr(packed)} is the wrong size for a {cls.__name__} field')
 
     return unpacked
 
@@ -377,7 +380,8 @@ class Size(Field):
 
     if stem.prereq._is_python_26():
       if not stem.util._is_int(content):
-        raise ValueError('Size.pack encodes an integer, but was a %s' % type(content).__name__)
+        raise ValueError(
+            f'Size.pack encodes an integer, but was a {type(content).__name__}')
       elif content < 0:
         raise ValueError('Packed values must be positive (attempted to pack %i as a %s)' % (content, self.name))
 
@@ -385,20 +389,21 @@ class Size(Field):
       packed = struct.pack(self.format, content)
     except struct.error:
       if not stem.util._is_int(content):
-        raise ValueError('Size.pack encodes an integer, but was a %s' % type(content).__name__)
+        raise ValueError(
+            f'Size.pack encodes an integer, but was a {type(content).__name__}')
       elif content < 0:
         raise ValueError('Packed values must be positive (attempted to pack %i as a %s)' % (content, self.name))
       else:
         raise  # some other struct exception
 
     if self.size != len(packed):
-      raise ValueError('%s is the wrong size for a %s field' % (repr(packed), self.name))
+      raise ValueError(f'{repr(packed)} is the wrong size for a {self.name} field')
 
     return packed
 
   def unpack(self, packed):
     if self.size != len(packed):
-      raise ValueError('%s is the wrong size for a %s field' % (repr(packed), self.name))
+      raise ValueError(f'{repr(packed)} is the wrong size for a {self.name} field')
 
     return struct.unpack(self.format, packed)[0]
 
@@ -438,7 +443,9 @@ class Address(Field):
         self.value_bin = b''.join([Size.CHAR.pack(int(v)) for v in value.split('.')])
       else:
         if len(value) != 4:
-          raise ValueError('Packed IPv4 addresses should be four bytes, but was: %s' % repr(value))
+          raise ValueError(
+              f'Packed IPv4 addresses should be four bytes, but was: {repr(value)}'
+          )
 
         self.value = '.'.join([str(Size.CHAR.unpack(value[i:i + 1])) for i in range(4)])
         self.value_bin = value
@@ -448,7 +455,9 @@ class Address(Field):
         self.value_bin = b''.join([Size.SHORT.pack(int(v, 16)) for v in self.value.split(':')])
       else:
         if len(value) != 16:
-          raise ValueError('Packed IPv6 addresses should be sixteen bytes, but was: %s' % repr(value))
+          raise ValueError(
+              f'Packed IPv6 addresses should be sixteen bytes, but was: {repr(value)}'
+          )
 
         self.value = ':'.join(['%04x' % Size.SHORT.unpack(value[i * 2:(i + 1) * 2]) for i in range(8)])
         self.value_bin = value

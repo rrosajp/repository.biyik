@@ -15,10 +15,7 @@ from tribler.defs import DHT_TIMEOUT, HTTP_TIMEOUT
 
 
 def timerprogress(caption, timeout, progress_callback, apicallback, **kwargs):
-    if progress_callback:
-        bgprogress = progress_callback
-    else:
-        bgprogress = gui.bgprogress(caption)
+    bgprogress = progress_callback or gui.bgprogress(caption)
     state = {"progress": None}
 
     def progress():
@@ -41,7 +38,7 @@ class common(container.container):
     def trackerquery(infohash, name=None, refresh=1, progress_callback=None):
         if not name:
             name = infohash
-        caption = "Tracker Query: %s" % name
+        caption = f"Tracker Query: {name}"
         return timerprogress(caption, DHT_TIMEOUT, progress_callback, metadata.torrenthealth,
                              infohash=infohash, refresh=refresh
                              )
@@ -49,7 +46,7 @@ class common(container.container):
     @staticmethod
     def metadataquery(uri=None, infohash=None, hops=None, progress_callback=None):
         url = uri or infohash
-        caption = "Metadata Query: %s" % url
+        caption = f"Metadata Query: {url}"
         return timerprogress(caption, HTTP_TIMEOUT, progress_callback, torrentinfo.get,
                              uri=uri, hops=hops, infohash=infohash
                              )
@@ -70,8 +67,9 @@ class common(container.container):
     @staticmethod
     def deletedownload(infohash, silent=False):
         remove_data = False
-        confirm = silent or gui.yesno("Are you sure?", "Are you sure you want to remove the torrent?")
-        if confirm:
+        if confirm := silent or gui.yesno(
+            "Are you sure?", "Are you sure you want to remove the torrent?"
+        ):
             remove_data = silent or gui.yesno("Remove Files Also?", "Do you want to completely remove the stored files from the file system as well?")
             ret = download.delete(infohash, remove_data)
             if ret.get("removed"):
@@ -87,7 +85,14 @@ class common(container.container):
     @staticmethod
     def callapiwithrefresh(address, *args, **kwargs):
         mdlname, mtdname = address.split(".")
-        mdl = __import__("tribler.api.%s" % mdlname, locals=None, globals=None, fromlist=[None], level=0)
+        mdl = __import__(
+            f"tribler.api.{mdlname}",
+            locals=None,
+            globals=None,
+            fromlist=[None],
+            level=0,
+        )
+
         method = getattr(getattr(mdl, mdlname), mtdname)
         ret = method(*args, **kwargs)
         container.refresh()

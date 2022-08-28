@@ -186,22 +186,17 @@ def _parse_header(descriptor, entries):
   while True:
     line = content.readline().strip()
 
-    if not line:
+    if (not line or line in (HEADER_DIV, HEADER_DIV_ALT)
+        or not header and b'node_id=' in line):
       break  # end of the content
-    elif line in (HEADER_DIV, HEADER_DIV_ALT):
-      break  # end of header
-    elif not header and b'node_id=' in line:
-      break  # version 1.0 doesn't have any headers
-
-    if b'=' in line:
-      key, value = stem.util.str_tools._to_unicode(line).split('=', 1)
-      header[key] = value
-
-      if key == 'version':
-        version_index = index
-    else:
+    if b'=' not in line:
       raise ValueError("Header expected to be key=value pairs, but had '%s'" % line)
 
+    key, value = stem.util.str_tools._to_unicode(line).split('=', 1)
+    header[key] = value
+
+    if key == 'version':
+      version_index = index
     index += 1
 
   descriptor.header = header
@@ -250,7 +245,9 @@ def _parse_body(descriptor, entries):
     if not fingerprint:
       raise ValueError("Every meaurement must include 'node_id': %s" % line)
     elif fingerprint in measurements:
-      raise ValueError('Relay %s is listed multiple times. It should only be present once.' % fingerprint)
+      raise ValueError(
+          f'Relay {fingerprint} is listed multiple times. It should only be present once.'
+      )
 
     measurements[fingerprint] = attr
 
@@ -330,7 +327,7 @@ class BandwidthFile(Descriptor):
     """
 
     if sign:
-      raise NotImplementedError('Signing of %s not implemented' % cls.__name__)
+      raise NotImplementedError(f'Signing of {cls.__name__} not implemented')
 
     header = OrderedDict(attr) if attr is not None else OrderedDict()
     timestamp = header.pop('timestamp', str(int(time.time())))
@@ -348,16 +345,14 @@ class BandwidthFile(Descriptor):
       # ensure 'version' is the second header
 
       if 'version' not in exclude:
-        lines.append(stem.util.str_tools._to_bytes('version=%s' % header.pop('version')))
+        lines.append(stem.util.str_tools._to_bytes(f"version={header.pop('version')}"))
 
-      for k, v in header.items():
-        lines.append(stem.util.str_tools._to_bytes('%s=%s' % (k, v)))
-
+      lines.extend(
+          stem.util.str_tools._to_bytes(f'{k}={v}') for k, v in header.items())
       lines.append(HEADER_DIV)
 
-    for measurement in content:
-      lines.append(stem.util.str_tools._to_bytes(measurement))
-
+    lines.extend(
+        stem.util.str_tools._to_bytes(measurement) for measurement in content)
     return b'\n'.join(lines)
 
   def __init__(self, raw_content, validate = False):

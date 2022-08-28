@@ -129,11 +129,7 @@ def _parse_file(descriptor_file, validate = False, **kwargs):
     # read until we reach an annotation or onion-key line
     descriptor_lines = []
 
-    # read the onion-key line, done if we're at the end of the document
-
-    onion_key_line = descriptor_file.readline()
-
-    if onion_key_line:
+    if onion_key_line := descriptor_file.readline():
       descriptor_lines.append(onion_key_line)
     else:
       break
@@ -170,18 +166,17 @@ def _parse_id_line(descriptor, entries):
   for entry in _values('id', entries):
     entry_comp = entry.split()
 
-    if len(entry_comp) >= 2:
-      key_type, key_value = entry_comp[0], entry_comp[1]
-
-      if key_type in identities:
-        raise ValueError("There can only be one 'id' line per a key type, but '%s' appeared multiple times" % key_type)
-
-      descriptor.identifier_type = key_type
-      descriptor.identifier = key_value
-      identities[key_type] = key_value
-    else:
+    if len(entry_comp) < 2:
       raise ValueError("'id' lines should contain both the key type and digest: id %s" % entry)
 
+    key_type, key_value = entry_comp[0], entry_comp[1]
+
+    if key_type in identities:
+      raise ValueError("There can only be one 'id' line per a key type, but '%s' appeared multiple times" % key_type)
+
+    descriptor.identifier_type = key_type
+    descriptor.identifier = key_value
+    identities[key_type] = key_value
   descriptor.identifiers = identities
 
 
@@ -264,7 +259,7 @@ class Microdescriptor(Descriptor):
   @classmethod
   def content(cls, attr = None, exclude = (), sign = False):
     if sign:
-      raise NotImplementedError('Signing of %s not implemented' % cls.__name__)
+      raise NotImplementedError(f'Signing of {cls.__name__} not implemented')
 
     return _descriptor_content(attr, exclude, (
       ('onion-key', _random_crypto_blob('RSA PUBLIC KEY')),
@@ -272,7 +267,7 @@ class Microdescriptor(Descriptor):
 
   def __init__(self, raw_contents, validate = False, annotations = None):
     super(Microdescriptor, self).__init__(raw_contents, lazy_load = not validate)
-    self._annotation_lines = annotations if annotations else []
+    self._annotation_lines = annotations or []
     entries = _descriptor_components(raw_contents, validate)
 
     if validate:
@@ -303,7 +298,9 @@ class Microdescriptor(Descriptor):
     elif hash_type == DigestHash.SHA256:
       return stem.descriptor._encode_digest(hashlib.sha256(self.get_bytes()), encoding)
     else:
-      raise NotImplementedError('Microdescriptor digests are only available in sha1 and sha256, not %s' % hash_type)
+      raise NotImplementedError(
+          f'Microdescriptor digests are only available in sha1 and sha256, not {hash_type}'
+      )
 
   @lru_cache()
   def get_annotations(self):
@@ -359,7 +356,7 @@ class Microdescriptor(Descriptor):
       if keyword in entries and len(entries[keyword]) > 1:
         raise ValueError("The '%s' entry can only appear once in a microdescriptor" % keyword)
 
-    if 'onion-key' != list(entries.keys())[0]:
+    if list(entries.keys())[0] != 'onion-key':
       raise ValueError("Microdescriptor must start with a 'onion-key' entry")
 
   def _name(self, is_plural = False):

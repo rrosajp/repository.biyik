@@ -10,7 +10,8 @@ from tinyxbmc import gui
 from tribler import defs
 
 
-BINARY_URL = "https://raw.githubusercontent.com/hbiyik/repository.biyik/master/%s/bin" % defs.ADDONID
+BINARY_URL = f"https://raw.githubusercontent.com/hbiyik/repository.biyik/master/{defs.ADDONID}/bin"
+
 PROFILE_DIR = addon.get_addondir(defs.ADDONID)
 STATE_DIR = os.path.join(PROFILE_DIR, "tribler_state")
 MEI_DIR = os.path.join(PROFILE_DIR, "tribler_freeze")
@@ -23,19 +24,24 @@ for d in [MEI_DIR, STATE_DIR, BIN_DIR]:
 def getbinaryurls():
     error = None
     os = abi.detect_os()
-    # TO-DO: windows .exe extension
-    if os == "linux":
-        toolchains, machine, is64, mflags = abi.getelfabi()
-        if toolchains:
-            return [("%s-%s" % (os, x), "%s/%s-%s/triblerd" % (BINARY_URL,
-                                                               os,
-                                                               x)) for x in toolchains], error
-        else:
-            return [], "Can't detect abi for os linux, machine: %s, 64bit: %s, flags: %s" % (machine,
-                                                                                             is64,
-                                                                                             mflags)
-    else:
-        return [], "%s os is not supported" % os
+    if os != "linux":
+        return [], f"{os} os is not supported"
+    toolchains, machine, is64, mflags = abi.getelfabi()
+    return (
+        (
+            [
+                (f"{os}-{x}", f"{BINARY_URL}/{os}-{x}/triblerd")
+                for x in toolchains
+            ],
+            error,
+        )
+        if toolchains
+        else (
+            [],
+            "Can't detect abi for os linux, machine: %s, 64bit: %s, flags: %s"
+            % (machine, is64, mflags),
+        )
+    )
 
 
 def update():
@@ -46,7 +52,7 @@ def update():
             return None
         fname = os.path.basename(binaryurl)
         localbin = os.path.join(BIN_DIR, fname)
-        localurl = os.path.join(BIN_DIR, "%s.url" % fname)
+        localurl = os.path.join(BIN_DIR, f"{fname}.url")
         if os.path.exists(localurl):
             with open(localurl) as f:
                 localurladdr = f.read().decode()

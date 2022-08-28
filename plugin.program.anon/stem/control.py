@@ -496,17 +496,14 @@ def with_default(yields = False):
       @functools.wraps(func)
       def wrapped(self, *args, **kwargs):
         try:
-          for val in func(self, *args, **kwargs):
-            yield val
+          yield from func(self, *args, **kwargs)
         except:
           default = get_default(func, args, kwargs)
 
           if default == UNDEFINED:
             raise
-          else:
-            if default is not None:
-              for val in default:
-                yield val
+          if default is not None:
+            yield from default
 
     return wrapped
 
@@ -645,11 +642,11 @@ class BaseController(object):
           if isinstance(response, stem.SocketClosed):
             pass  # this is fine
           elif isinstance(response, stem.ProtocolError):
-            log.info('Tor provided a malformed message (%s)' % response)
+            log.info(f'Tor provided a malformed message ({response})')
           elif isinstance(response, stem.ControllerError):
-            log.info('Socket experienced a problem (%s)' % response)
+            log.info(f'Socket experienced a problem ({response})')
           elif isinstance(response, stem.response.ControlMessage):
-            log.info('Failed to deliver a response: %s' % response)
+            log.info(f'Failed to deliver a response: {response}')
         except queue.Empty:
           # the empty() method is documented to not be fully reliable so this
           # isn't entirely surprising
@@ -905,7 +902,8 @@ class BaseController(object):
           if spawn:
             args = (self, state, change_timestamp)
 
-            notice_thread = threading.Thread(target = listener, args = args, name = '%s notification' % state)
+            notice_thread = threading.Thread(
+                target=listener, args=args, name=f'{state} notification')
             notice_thread.setDaemon(True)
             notice_thread.start()
             self._state_change_threads.append(notice_thread)
@@ -1021,9 +1019,9 @@ class Controller(BaseController):
     import stem.connection
 
     if not stem.util.connection.is_valid_ipv4_address(address):
-      raise ValueError('Invalid IP address: %s' % address)
+      raise ValueError(f'Invalid IP address: {address}')
     elif port != 'default' and not stem.util.connection.is_valid_port(port):
-      raise ValueError('Invalid port: %s' % port)
+      raise ValueError(f'Invalid port: {port}')
 
     if port == 'default':
       control_port = stem.connection._connection_for_default_port(address)
@@ -1075,8 +1073,8 @@ class Controller(BaseController):
 
     def _confchanged_listener(event):
       if self.is_caching_enabled():
-        to_cache_changed = dict((k.lower(), v) for k, v in event.changed.items())
-        to_cache_unset = dict((k.lower(), []) for k in event.unset)  # [] represents None value in cache
+        to_cache_changed = {k.lower(): v for k, v in event.changed.items()}
+        to_cache_unset = {k.lower(): [] for k in event.unset}
 
         to_cache = {}
         to_cache.update(to_cache_changed)
@@ -1166,7 +1164,7 @@ class Controller(BaseController):
 
     if stem.util._is_str(params):
       is_multiple = False
-      params = set([params])
+      params = {params}
     else:
       if not params:
         return {}
@@ -1195,24 +1193,23 @@ class Controller(BaseController):
     # if everything was cached then short circuit making the query
     if not params:
       if LOG_CACHE_FETCHES:
-        log.trace('GETINFO %s (cache fetch)' % ' '.join(reply.keys()))
+        log.trace(f"GETINFO {' '.join(reply.keys())} (cache fetch)")
 
-      if is_multiple:
-        return reply
-      else:
-        return list(reply.values())[0]
-
+      return reply if is_multiple else list(reply.values())[0]
     try:
-      response = self.msg('GETINFO %s' % ' '.join(params))
+      response = self.msg(f"GETINFO {' '.join(params)}")
       stem.response.convert('GETINFO', response)
       response._assert_matches(params)
 
       # usually we want unicode values under python 3.x
 
       if stem.prereq.is_python_3() and not get_bytes:
-        response.entries = dict((k, stem.util.str_tools._to_unicode(v)) for (k, v) in response.entries.items())
+        response.entries = {
+            k: stem.util.str_tools._to_unicode(v)
+            for (k, v) in response.entries.items()
+        }
 
-      reply.update(response.entries)
+      reply |= response.entries
 
       if self.is_caching_enabled():
         to_cache = {}
@@ -1220,11 +1217,12 @@ class Controller(BaseController):
         for key, value in response.entries.items():
           key = key.lower()  # make case insensitive
 
-          if key in CACHEABLE_GETINFO_PARAMS or key in CACHEABLE_GETINFO_PARAMS_UNTIL_SETCONF:
+          if (key in CACHEABLE_GETINFO_PARAMS
+              or key in CACHEABLE_GETINFO_PARAMS_UNTIL_SETCONF
+              or key not in CACHEABLE_GETINFO_PARAMS
+              and key not in CACHEABLE_GETINFO_PARAMS_UNTIL_SETCONF
+              and key.startswith('ip-to-country/')):
             to_cache[key] = value
-          elif key.startswith('ip-to-country/'):
-            to_cache[key] = value
-
         self._set_cache(to_cache, 'getinfo')
 
       if 'address' in params:
@@ -1235,10 +1233,7 @@ class Controller(BaseController):
 
       log.debug('GETINFO %s (runtime: %0.4f)' % (' '.join(params), time.time() - start_time))
 
-      if is_multiple:
-        return reply
-      else:
-        return list(reply.values())[0]
+      return reply if is_multiple else list(reply.values())[0]
     except stem.ControllerError as exc:
       if 'address' in params:
         self._last_address_exc = exc
@@ -1246,7 +1241,7 @@ class Controller(BaseController):
       if 'fingerprint' in params:
         self._last_fingerprint_exc = exc
 
-      log.debug('GETINFO %s (failed: %s)' % (' '.join(params), exc))
+      log.debug(f"GETINFO {' '.join(params)} (failed: {exc})")
       raise
 
   @with_default()
@@ -1410,7 +1405,7 @@ class Controller(BaseController):
 
     if listeners is None:
       proxy_addrs = []
-      query = 'net/listeners/%s' % listener_type.lower()
+      query = f'net/listeners/{listener_type.lower()}'
 
       try:
         for listener in self.get_info(query).split():
@@ -1477,9 +1472,11 @@ class Controller(BaseController):
 
       for addr, port in proxy_addrs:
         if not stem.util.connection.is_valid_ipv4_address(addr) and not stem.util.connection.is_valid_ipv6_address(addr):
-          raise stem.ProtocolError('Invalid address for a %s listener: %s' % (listener_type, addr))
+          raise stem.ProtocolError(
+              f'Invalid address for a {listener_type} listener: {addr}')
         elif not stem.util.connection.is_valid_port(port):
-          raise stem.ProtocolError('Invalid port for a %s listener: %s' % (listener_type, port))
+          raise stem.ProtocolError(
+              f'Invalid port for a {listener_type} listener: {port}')
 
       listeners = [(addr, int(port)) for (addr, port) in proxy_addrs]
       self._set_cache({listener_type: listeners}, 'listeners')
@@ -1596,16 +1593,13 @@ class Controller(BaseController):
     user = self.get_info('process/user', None)
 
     if not user and self.is_localhost():
-      pid = self.get_pid(None)
-
-      if pid:
+      if pid := self.get_pid(None):
         user = stem.util.system.user(pid)
 
-    if user:
-      self._set_cache({'user': user})
-      return user
-    else:
+    if not user:
       raise ValueError("Unable to resolve tor's user" if self.is_localhost() else "Tor isn't running locally")
+    self._set_cache({'user': user})
+    return user
 
   @with_default()
   def get_pid(self, default = UNDEFINED):
@@ -1657,11 +1651,10 @@ class Controller(BaseController):
         elif isinstance(control_socket, stem.socket.ControlSocketFile):
           pid = stem.util.system.pid_by_open_file(control_socket.path)
 
-    if pid:
-      self._set_cache({'pid': pid})
-      return pid
-    else:
+    if not pid:
       raise ValueError("Unable to resolve tor's pid" if self.is_localhost() else "Tor isn't running locally")
+    self._set_cache({'pid': pid})
+    return pid
 
   @with_default()
   def get_start_time(self, default = UNDEFINED):
@@ -1686,9 +1679,7 @@ class Controller(BaseController):
       return start_time
 
     if self.get_version() >= stem.version.Requirement.GETINFO_UPTIME:
-      uptime = self.get_info('uptime', None)
-
-      if uptime:
+      if uptime := self.get_info('uptime', None):
         if not uptime.isdigit():
           raise ValueError("'GETINFO uptime' did not provide a valid numeric response: %s" % uptime)
 
@@ -1701,18 +1692,16 @@ class Controller(BaseController):
       if not self.is_localhost():
         raise ValueError('Unable to determine the uptime when tor is not running locally')
 
-      pid = self.get_pid(None)
+      if pid := self.get_pid(None):
+        start_time = stem.util.system.start_time(pid)
 
-      if not pid:
+      else:
         raise ValueError('Unable to determine the pid of the tor process')
 
-      start_time = stem.util.system.start_time(pid)
-
-    if start_time:
-      self._set_cache({'start_time': start_time})
-      return start_time
-    else:
+    if not start_time:
       raise ValueError("Unable to resolve when tor began" if self.is_localhost() else "Tor isn't running locally")
+    self._set_cache({'start_time': start_time})
+    return start_time
 
   @with_default()
   def get_uptime(self, default = UNDEFINED):
@@ -1810,12 +1799,12 @@ class Controller(BaseController):
       try:
         relay = self.get_info('fingerprint')
       except stem.ControllerError as exc:
-        raise stem.ControllerError('Unable to determine our own fingerprint: %s' % exc)
+        raise stem.ControllerError(f'Unable to determine our own fingerprint: {exc}')
 
     if stem.util.tor_tools.is_valid_fingerprint(relay):
-      query = 'md/id/%s' % relay
+      query = f'md/id/{relay}'
     elif stem.util.tor_tools.is_valid_nickname(relay):
-      query = 'md/name/%s' % relay
+      query = f'md/name/{relay}'
     else:
       raise ValueError("'%s' isn't a valid fingerprint or nickname" % relay)
 
@@ -1856,13 +1845,12 @@ class Controller(BaseController):
     """
 
     if self.get_version() >= stem.version.Requirement.GETINFO_MICRODESCRIPTORS:
-      desc_content = self.get_info('md/all', get_bytes = True)
-
-      if not desc_content:
+      if desc_content := self.get_info('md/all', get_bytes=True):
+        yield from stem.descriptor.microdescriptor._parse_file(
+            io.BytesIO(desc_content))
+      else:
         raise stem.DescriptorUnavailable('Descriptor information is unavailable, tor might still be downloading it')
 
-      for desc in stem.descriptor.microdescriptor._parse_file(io.BytesIO(desc_content)):
-        yield desc
     else:
       # TODO: remove when tor versions that require this are obsolete
 
@@ -1891,7 +1879,10 @@ class Controller(BaseController):
         # microdescriptors but as the saying goes: trust but verify.
 
         if not isinstance(desc, stem.descriptor.microdescriptor.Microdescriptor):
-          raise stem.OperationFailed(message = 'BUG: Descriptor reader provided non-microdescriptor content (%s)' % type(desc))
+          raise stem.OperationFailed(
+              message=
+              f'BUG: Descriptor reader provided non-microdescriptor content ({type(desc)})'
+          )
 
         yield desc
 
@@ -1937,12 +1928,12 @@ class Controller(BaseController):
         try:
           relay = self.get_info('fingerprint')
         except stem.ControllerError as exc:
-          raise stem.ControllerError('Unable to determine our own fingerprint: %s' % exc)
+          raise stem.ControllerError(f'Unable to determine our own fingerprint: {exc}')
 
       if stem.util.tor_tools.is_valid_fingerprint(relay):
-        query = 'desc/id/%s' % relay
+        query = f'desc/id/{relay}'
       elif stem.util.tor_tools.is_valid_nickname(relay):
-        query = 'desc/name/%s' % relay
+        query = f'desc/name/{relay}'
       else:
         raise ValueError("'%s' isn't a valid fingerprint or nickname" % relay)
 
@@ -2000,8 +1991,8 @@ class Controller(BaseController):
       else:
         raise stem.DescriptorUnavailable('Descriptor information is unavailable, tor might still be downloading it')
 
-    for desc in stem.descriptor.server_descriptor._parse_file(io.BytesIO(desc_content)):
-      yield desc
+    yield from stem.descriptor.server_descriptor._parse_file(
+        io.BytesIO(desc_content))
 
   def _is_server_descriptors_available(self):
     """
@@ -2053,12 +2044,12 @@ class Controller(BaseController):
       try:
         relay = self.get_info('fingerprint')
       except stem.ControllerError as exc:
-        raise stem.ControllerError('Unable to determine our own fingerprint: %s' % exc)
+        raise stem.ControllerError(f'Unable to determine our own fingerprint: {exc}')
 
     if stem.util.tor_tools.is_valid_fingerprint(relay):
-      query = 'ns/id/%s' % relay
+      query = f'ns/id/{relay}'
     elif stem.util.tor_tools.is_valid_nickname(relay):
-      query = 'ns/name/%s' % relay
+      query = f'ns/name/{relay}'
     else:
       raise ValueError("'%s' isn't a valid fingerprint or nickname" % relay)
 
@@ -2093,24 +2084,14 @@ class Controller(BaseController):
       default was provided
     """
 
-    # TODO: We should iterate over the descriptors as they're read from the
-    # socket rather than reading the whole thing into memory.
-    #
-    # https://trac.torproject.org/8248
-
-    desc_content = self.get_info('ns/all', get_bytes = True)
-
-    if not desc_content:
+    if desc_content := self.get_info('ns/all', get_bytes=True):
+      yield from stem.descriptor.router_status_entry._parse_file(
+          io.BytesIO(desc_content),
+          False,
+          entry_class=stem.descriptor.router_status_entry.RouterStatusEntryV3,
+      )
+    else:
       raise stem.DescriptorUnavailable('Descriptor information is unavailable, tor might still be downloading it')
-
-    desc_iterator = stem.descriptor.router_status_entry._parse_file(
-      io.BytesIO(desc_content),
-      False,
-      entry_class = stem.descriptor.router_status_entry.RouterStatusEntryV3,
-    )
-
-    for desc in desc_iterator:
-      yield desc
 
   @with_default()
   def get_hidden_service_descriptor(self, address, default = UNDEFINED, servers = None, await_result = True, timeout = None):
@@ -2157,7 +2138,9 @@ class Controller(BaseController):
       raise ValueError("'%s.onion' isn't a valid hidden service address" % address)
 
     if self.get_version() < stem.version.Requirement.HSFETCH:
-      raise stem.UnsatisfiableRequest(message = 'HSFETCH was added in tor version %s' % stem.version.Requirement.HSFETCH)
+      raise stem.UnsatisfiableRequest(
+          message=
+          f'HSFETCH was added in tor version {stem.version.Requirement.HSFETCH}')
 
     hs_desc_queue, hs_desc_listener = queue.Queue(), None
     hs_desc_content_queue, hs_desc_content_listener = queue.Queue(), None
@@ -2174,37 +2157,39 @@ class Controller(BaseController):
       self.add_event_listener(hs_desc_content_listener, EventType.HS_DESC_CONTENT)
 
     try:
-      request = 'HSFETCH %s' % address
+      request = f'HSFETCH {address}'
 
       if servers:
-        request += ' ' + ' '.join(['SERVER=%s' % s for s in servers])
+        request += ' ' + ' '.join([f'SERVER={s}' for s in servers])
 
       response = self.msg(request)
       stem.response.convert('SINGLELINE', response)
 
       if not response.is_ok():
-        raise stem.ProtocolError('HSFETCH returned unexpected response code: %s' % response.code)
+        raise stem.ProtocolError(
+            f'HSFETCH returned unexpected response code: {response.code}')
 
       if not await_result:
         return None  # not waiting, so nothing to provide back
-      else:
-        while True:
-          event = _get_with_timeout(hs_desc_content_queue, timeout, start_time)
+      while True:
+        event = _get_with_timeout(hs_desc_content_queue, timeout, start_time)
 
-          if event.address == address:
-            if event.descriptor:
-              return event.descriptor
-            else:
+        if event.address == address:
+          if event.descriptor:
+            return event.descriptor
               # no descriptor, looking through HS_DESC to figure out why
 
-              while True:
-                event = _get_with_timeout(hs_desc_queue, timeout, start_time)
+          while True:
+            event = _get_with_timeout(hs_desc_queue, timeout, start_time)
 
-                if event.address == address and event.action == stem.HSDescAction.FAILED:
-                  if event.reason == stem.HSDescReason.NOT_FOUND:
-                    raise stem.DescriptorUnavailable('No running hidden service at %s.onion' % address)
-                  else:
-                    raise stem.DescriptorUnavailable('Unable to retrieve the descriptor for %s.onion (retrieved from %s): %s' % (address, event.directory_fingerprint, event.reason))
+            if event.address == address and event.action == stem.HSDescAction.FAILED:
+              if event.reason == stem.HSDescReason.NOT_FOUND:
+                raise stem.DescriptorUnavailable(
+                    f'No running hidden service at {address}.onion')
+              else:
+                raise stem.DescriptorUnavailable(
+                    f'Unable to retrieve the descriptor for {address}.onion (retrieved from {event.directory_fingerprint}): {event.reason}'
+                )
     finally:
       if hs_desc_listener:
         self.remove_event_listener(hs_desc_listener)
@@ -2318,11 +2303,11 @@ class Controller(BaseController):
     # remove strings which contain only whitespace
     params = [entry for entry in params if entry.strip()]
 
-    if params == []:
+    if not params:
       return {}
 
     # translate context sensitive options
-    lookup_params = set([MAPPED_CONFIG_KEYS.get(entry, entry) for entry in params])
+    lookup_params = {MAPPED_CONFIG_KEYS.get(entry, entry) for entry in params}
 
     # check for cached results
 
@@ -2337,17 +2322,17 @@ class Controller(BaseController):
     # if everything was cached then short circuit making the query
     if not lookup_params:
       if LOG_CACHE_FETCHES:
-        log.trace('GETCONF %s (cache fetch)' % ' '.join(reply.keys()))
+        log.trace(f"GETCONF {' '.join(reply.keys())} (cache fetch)")
 
       return self._get_conf_dict_to_response(reply, default, multiple)
 
     try:
-      response = self.msg('GETCONF %s' % ' '.join(lookup_params))
+      response = self.msg(f"GETCONF {' '.join(lookup_params)}")
       stem.response.convert('GETCONF', response)
-      reply.update(response.entries)
+      reply |= response.entries
 
       if self.is_caching_enabled():
-        to_cache = dict((k.lower(), v) for k, v in response.entries.items())
+        to_cache = {k.lower(): v for k, v in response.entries.items()}
 
         self._set_cache(to_cache, 'getconf')
 
@@ -2362,7 +2347,7 @@ class Controller(BaseController):
       # be sure what they wanted.
 
       for key in list(reply):
-        if not key.lower() in MAPPED_CONFIG_KEYS.values():
+        if key.lower() not in MAPPED_CONFIG_KEYS.values():
           user_expected_key = _case_insensitive_lookup(params, key, key)
 
           if key != user_expected_key:
@@ -2372,10 +2357,10 @@ class Controller(BaseController):
       log.debug('GETCONF %s (runtime: %0.4f)' % (' '.join(lookup_params), time.time() - start_time))
       return self._get_conf_dict_to_response(reply, default, multiple)
     except stem.ControllerError as exc:
-      log.debug('GETCONF %s (failed: %s)' % (' '.join(lookup_params), exc))
+      log.debug(f"GETCONF {' '.join(lookup_params)} (failed: {exc})")
 
       if default != UNDEFINED:
-        return dict((param, default) for param in params)
+        return {param: default for param in params}
       else:
         raise
 
@@ -2433,10 +2418,10 @@ class Controller(BaseController):
       # https://trac.torproject.org/projects/tor/ticket/17909
 
       default_lines = (
-        'Log notice stdout',
-        'Log notice file /var/log/tor/log',
-        'DataDirectory /home/%s/.tor' % self.get_user('undefined'),
-        'HiddenServiceStatistics 0',
+          'Log notice stdout',
+          'Log notice file /var/log/tor/log',
+          f"DataDirectory /home/{self.get_user('undefined')}/.tor",
+          'HiddenServiceStatistics 0',
       )
 
       for line in default_lines:
@@ -2535,7 +2520,9 @@ class Controller(BaseController):
       elif not value:
         query_comp.append(param)
       else:
-        raise ValueError('Cannot set %s to %s since the value was a %s but we only accept strings' % (param, value, type(value).__name__))
+        raise ValueError(
+            f'Cannot set {param} to {value} since the value was a {type(value).__name__} but we only accept strings'
+        )
 
     query = ' '.join(query_comp)
     response = self.msg(query)
@@ -2546,14 +2533,17 @@ class Controller(BaseController):
 
       if self.is_caching_enabled():
         # clear cache for params; the CONF_CHANGED event will set cache for changes
-        to_cache = dict((k.lower(), None) for k, v in params)
+        to_cache = {k.lower(): None for k, v in params}
         self._set_cache(to_cache, 'getconf')
         self._confchanged_cache_invalidation(dict(params))
     else:
-      log.debug('%s (failed, code: %s, message: %s)' % (query, response.code, response.message))
-      immutable_params = [k for k, v in params if stem.util.str_tools._to_unicode(k).lower() in IMMUTABLE_CONFIG_OPTIONS]
-
-      if immutable_params:
+      log.debug(
+          f'{query} (failed, code: {response.code}, message: {response.message})'
+      )
+      if immutable_params := [
+          k for k, v in params if stem.util.str_tools._to_unicode(k).lower() in
+          IMMUTABLE_CONFIG_OPTIONS
+      ]:
         raise stem.InvalidArguments(message = "%s cannot be changed while tor's running" % ', '.join(sorted(immutable_params)), arguments = immutable_params)
 
       if response.code == '552':
@@ -2564,7 +2554,7 @@ class Controller(BaseController):
       elif response.code in ('513', '553'):
         raise stem.InvalidRequest(response.code, response.message)
       else:
-        raise stem.ProtocolError('Returned unexpected status code: %s' % response.code)
+        raise stem.ProtocolError(f'Returned unexpected status code: {response.code}')
 
   @with_default()
   def get_hidden_service_conf(self, default = UNDEFINED):
@@ -2618,7 +2608,7 @@ class Controller(BaseController):
       log.debug('GETCONF HiddenServiceOptions (runtime: %0.4f)' %
                 (time.time() - start_time))
     except stem.ControllerError as exc:
-      log.debug('GETCONF HiddenServiceOptions (failed: %s)' % exc)
+      log.debug(f'GETCONF HiddenServiceOptions (failed: {exc})')
       raise
 
     service_dir_map = OrderedDict()
@@ -2649,11 +2639,17 @@ class Controller(BaseController):
             target_address, target_port = target.rsplit(':', 1)
 
         if not stem.util.connection.is_valid_port(port):
-          raise stem.ProtocolError('GETCONF provided an invalid HiddenServicePort port (%s): %s' % (port, content))
+          raise stem.ProtocolError(
+              f'GETCONF provided an invalid HiddenServicePort port ({port}): {content}'
+          )
         elif not stem.util.connection.is_valid_ipv4_address(target_address):
-          raise stem.ProtocolError('GETCONF provided an invalid HiddenServicePort target address (%s): %s' % (target_address, content))
+          raise stem.ProtocolError(
+              f'GETCONF provided an invalid HiddenServicePort target address ({target_address}): {content}'
+          )
         elif not stem.util.connection.is_valid_port(target_port):
-          raise stem.ProtocolError('GETCONF provided an invalid HiddenServicePort target port (%s): %s' % (target_port, content))
+          raise stem.ProtocolError(
+              f'GETCONF provided an invalid HiddenServicePort target port ({target_port}): {content}'
+          )
 
         service_dir_map[directory]['HiddenServicePort'].append((int(port), target_address, int(target_port)))
       else:
@@ -2714,12 +2710,12 @@ class Controller(BaseController):
         if k == 'HiddenServicePort':
           for entry in v:
             if isinstance(entry, int):
-              entry = '%s 127.0.0.1:%s' % (entry, entry)
+              entry = f'{entry} 127.0.0.1:{entry}'
             elif isinstance(entry, str):
               pass  # just pass along what the user gave us
             elif isinstance(entry, tuple):
               port, target_address, target_port = entry
-              entry = '%s %s:%s' % (port, target_address, target_port)
+              entry = f'{port} {target_address}:{target_port}'
 
             hidden_service_options.append(('HiddenServicePort', entry))
         else:
@@ -2769,7 +2765,7 @@ class Controller(BaseController):
       raise ValueError("%s isn't a recognized type of authentication" % auth_type)
 
     port = int(port)
-    target_address = target_address if target_address else '127.0.0.1'
+    target_address = target_address or '127.0.0.1'
     target_port = port if target_port is None else int(target_port)
 
     conf = self.get_hidden_service_conf()
@@ -2780,7 +2776,7 @@ class Controller(BaseController):
     conf.setdefault(path, OrderedDict()).setdefault('HiddenServicePort', []).append((port, target_address, target_port))
 
     if auth_type and client_names:
-      hsac = "%s %s" % (auth_type, ','.join(client_names))
+      hsac = f"{auth_type} {','.join(client_names)}"
       conf[path]['HiddenServiceAuthorizeClient'] = hsac
 
     # Tor 0.3.5 changes its default for HS creation from v2 to v3. This is
@@ -2802,9 +2798,7 @@ class Controller(BaseController):
       hostname_path = os.path.join(path, 'hostname')
 
       if not os.path.isabs(hostname_path):
-        cwd = stem.util.system.cwd(self.get_pid(None))
-
-        if cwd:
+        if cwd := stem.util.system.cwd(self.get_pid(None)):
           hostname_path = stem.util.system.expand_path(hostname_path, cwd)
 
       if os.path.isabs(hostname_path):
@@ -2914,7 +2908,10 @@ class Controller(BaseController):
     """
 
     if self.get_version() < stem.version.Requirement.ADD_ONION:
-      raise stem.UnsatisfiableRequest(message = 'Ephemeral hidden services were added in tor version %s' % stem.version.Requirement.ADD_ONION)
+      raise stem.UnsatisfiableRequest(
+          message=
+          f'Ephemeral hidden services were added in tor version {stem.version.Requirement.ADD_ONION}'
+      )
 
     result = []
 

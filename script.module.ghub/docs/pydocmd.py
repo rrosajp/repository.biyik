@@ -61,14 +61,12 @@ def insp_mod(mod_name, mod_inst):
         'classes': [],
     }
 
-    # Get module documentation
-    mod_doc = inspect.getdoc(mod_inst)
-    if mod_doc:
+    if mod_doc := inspect.getdoc(mod_inst):
         info['doc'] = mod_doc
 
     for attr_name in ['author', 'copyright', 'license', 'version', 'maintainer', 'email']:
-        if hasattr(mod_inst, '__%s__' % (attr_name)):
-            info['author'][attr_name] = getattr(mod_inst, '__%s__' % (attr_name))
+        if hasattr(mod_inst, f'__{attr_name}__'):
+            info['author'][attr_name] = getattr(mod_inst, f'__{attr_name}__')
 
     # Get module global vars
     for member_name, member_inst in inspect.getmembers(mod_inst):
@@ -79,14 +77,11 @@ def insp_mod(mod_name, mod_inst):
            member_name not in mod_inst.__builtins__:
             info['vars'].append( (member_name, member_inst) )
 
-    # Get module functions
-    functions = inspect.getmembers(mod_inst, inspect.isfunction)
-    if functions:
+    if functions := inspect.getmembers(mod_inst, inspect.isfunction):
         for func_name, func_inst in functions:
             info['functions'].append(insp_method(func_name, func_inst))
 
-    classes = inspect.getmembers(mod_inst, inspect.isclass)
-    if classes:
+    if classes := inspect.getmembers(mod_inst, inspect.isclass):
         for class_name, class_inst in classes:
             info['classes'].append(insp_class(class_name, class_inst))
 
@@ -104,9 +99,7 @@ def insp_class(class_name, class_inst):
         'methods': [],
     }
 
-    # Get class documentation
-    class_doc = inspect.getdoc(class_inst)
-    if class_doc:
+    if class_doc := inspect.getdoc(class_inst):
         info['doc'] = class_doc
 
     # Get class methods
@@ -138,11 +131,9 @@ def insp_method(method_name, method_inst):
     if method_args.defaults:
         a_pos = len(info['args']) - len(method_args.defaults)
         for pos, default in enumerate(method_args.defaults):
-            info['args'][a_pos + pos] = '%s=%s' % (info['args'][a_pos + pos], default)
+            info['args'][a_pos + pos] = f"{info['args'][a_pos + pos]}={default}"
 
-    # Print method documentation 
-    method_doc = inspect.getdoc(method_inst)
-    if method_doc:
+    if method_doc := inspect.getdoc(method_inst):
         info['doc'] = method_doc
 
     return info
@@ -151,13 +142,13 @@ def insp_method(method_name, method_inst):
 def api_md(file_i):
     apiname = file_i['name'] + " API"
     outstr = apiname.title() + "\n"
-    outstr += "%s" % "="*len(apiname)
+    outstr += '=' * len(apiname)
     tocstr = "%s- [%s](#%s)\n" % ("    " * 0, apiname.title(), fmt_link(apiname))
     author = ''
     if 'author' in file_i['author']:
         author += file_i['author']['author'] + ' '
     if 'email' in file_i['author']:
-        author += '<%s>' % (file_i['author']['email'])
+        author += f"<{file_i['author']['email']}>"
     if author:
         outstr += "\n\n* __Author__: %s \n" % (author)
 
@@ -243,8 +234,9 @@ def inline(text):
                     body += "|%s|%s|\n" % (arg, val.strip())
                 arg, val = line.split(":")[:2]
             else:
-                val += " " + line
+                val += f" {line}"
         return body + "\nReturns:\n"
+
     text = re.sub("\n\s*?Params:\s*?\n(.*?)\n\s*?Returns:\s*?\n", params, text, flags=re.DOTALL)
     for header in ["Example", "Params", "Attributes", "Returns"]:
         text = re.sub("\n%s:\n" % header, "\n**%s:**\n" % header, text)
@@ -253,14 +245,13 @@ def inline(text):
 
 def create(modules, pages, readme):
     outstr = "\n"
-    tocstr = "Table of Contents\n"
-    tocstr += "=================\n\n"
+    tocstr = "Table of Contents\n" + "=================\n\n"
     tocstr += "%s- [%s](#%s)\n" % ("    " * 0, "Table of Contents", "table-of-contents")
     for page in pages:
         with open(page) as f:
             fname = page.split(os.path.sep)[0].split(".")[0]
             outstr += fname.title() + "\n"
-            outstr += "%s" % "="*len(fname)
+            outstr += '=' * len(fname)
             outstr += "\n%s\n\n" % f.read()
             outstr += "[Return to TOC](#table-of-contents)\n"
             tocstr += "%s- [%s](#%s)\n" % ("    " * 0, fname.title(), fmt_link(fname))

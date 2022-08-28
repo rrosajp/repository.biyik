@@ -133,7 +133,8 @@ class Cell(object):
     raise ValueError("'%s' isn't a valid cell value" % value)
 
   def pack(self, link_protocol):
-    raise NotImplementedError('Packing not yet implemented for %s cells' % type(self).NAME)
+    raise NotImplementedError(
+        f'Packing not yet implemented for {type(self).NAME} cells')
 
   @staticmethod
   def unpack(content, link_protocol):
@@ -210,14 +211,14 @@ class Cell(object):
 
     if issubclass(cls, CircuitCell):
       if circ_id is None:
-        raise ValueError('%s cells require a circuit identifier' % cls.NAME)
+        raise ValueError(f'{cls.NAME} cells require a circuit identifier')
       elif circ_id < 1:
-        raise ValueError('Circuit identifiers must a positive integer, not %s' % circ_id)
-    else:
-      if circ_id is not None:
-        raise ValueError('%s cells should not specify a circuit identifier' % cls.NAME)
-
+        raise ValueError(f'Circuit identifiers must a positive integer, not {circ_id}')
+    elif circ_id is None:
       circ_id = 0  # cell doesn't concern a circuit, default field to zero
+
+    else:
+      raise ValueError(f'{cls.NAME} cells should not specify a circuit identifier')
 
     link_protocol = LinkProtocol(link_protocol)
 
@@ -254,7 +255,8 @@ class Cell(object):
     :raises: **ValueError** if content is malformed
     """
 
-    raise NotImplementedError('Unpacking not yet implemented for %s cells' % cls.NAME)
+    raise NotImplementedError(
+        f'Unpacking not yet implemented for {cls.NAME} cells')
 
   def __eq__(self, other):
     return hash(self) == hash(other) if isinstance(other, Cell) else False
@@ -357,10 +359,10 @@ class RelayCell(CircuitCell):
     elif stem.util._is_str(digest):
       digest_packed = digest[:RELAY_DIGEST_SIZE.size]
       digest = RELAY_DIGEST_SIZE.unpack(digest_packed)
-    elif stem.util._is_int(digest):
-      pass
-    else:
-      raise ValueError('RELAY cell digest must be a hash, string, or int but was a %s' % type(digest).__name__)
+    elif not stem.util._is_int(digest):
+      raise ValueError(
+          f'RELAY cell digest must be a hash, string, or int but was a {type(digest).__name__}'
+      )
 
     super(RelayCell, self).__init__(circ_id, unused)
     self.command, self.command_int = RelayCommand.get(command)
@@ -371,9 +373,11 @@ class RelayCell(CircuitCell):
 
     if digest == 0:
       if not stream_id and self.command in STREAM_ID_REQUIRED:
-        raise ValueError('%s relay cells require a stream id' % self.command)
+        raise ValueError(f'{self.command} relay cells require a stream id')
       elif stream_id and self.command in STREAM_ID_DISALLOWED:
-        raise ValueError('%s relay cells concern the circuit itself and cannot have a stream id' % self.command)
+        raise ValueError(
+            f'{self.command} relay cells concern the circuit itself and cannot have a stream id'
+        )
 
   def pack(self, link_protocol):
     payload = bytearray()
@@ -649,7 +653,7 @@ class NetinfoCell(Cell):
 
   def __init__(self, receiver_address, sender_addresses, timestamp = None, unused = b''):
     super(NetinfoCell, self).__init__(unused)
-    self.timestamp = timestamp if timestamp else datetime.datetime.now()
+    self.timestamp = timestamp or datetime.datetime.now()
     self.receiver_address = receiver_address
     self.sender_addresses = sender_addresses
 
@@ -672,7 +676,7 @@ class NetinfoCell(Cell):
     sender_addresses = []
     sender_addr_count, content = Size.CHAR.pop(content)
 
-    for i in range(sender_addr_count):
+    for _ in range(sender_addr_count):
       addr, content = Address.pop(content)
       sender_addresses.append(addr)
 
@@ -733,7 +737,7 @@ class VPaddingCell(Cell):
     if size is None and payload is None:
       raise ValueError('VPaddingCell constructor must specify payload or size')
     elif size is not None and size < 0:
-      raise ValueError('VPaddingCell size (%s) cannot be negative' % size)
+      raise ValueError(f'VPaddingCell size ({size}) cannot be negative')
     elif size is not None and payload is not None and size != len(payload):
       raise ValueError('VPaddingCell constructor specified both a size of %i bytes and payload of %i bytes' % (size, len(payload)))
 
@@ -774,7 +778,7 @@ class CertsCell(Cell):
     cert_count, content = Size.CHAR.pop(content)
     certs = []
 
-    for i in range(cert_count):
+    for _ in range(cert_count):
       if not content:
         raise ValueError('CERTS cell indicates it should have %i certificates, but only contained %i' % (cert_count, len(certs)))
 
@@ -834,7 +838,7 @@ class AuthChallengeCell(Cell):
 
     methods = []
 
-    for i in range(method_count):
+    for _ in range(method_count):
       method, content = Size.SHORT.pop(content)
       methods.append(method)
 

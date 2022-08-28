@@ -90,13 +90,16 @@ class TorrentWindow(pyxbmct.AddonDialogWindow):
     def circuits(self, value):
         self.__circuits = value
         if self.hops or self.anonupload:
-            num = 0
-            for circuit in self.circuits:
-                if circuit["actual_hops"] == self.hops and circuit["type"] == "DATA" and circuit["state"] == "READY":
-                    num += 1
+            num = sum(
+                circuit["actual_hops"] == self.hops
+                and circuit["type"] == "DATA"
+                and circuit["state"] == "READY"
+                for circuit in self.circuits
+            )
+
         else:
             num = "-"
-        self.circuits_label.setLabel("Circuits: %s/%s" % (num, len(self.circuits)))
+        self.circuits_label.setLabel(f"Circuits: {num}/{len(self.circuits)}")
 
     @property
     def triblertunnelcommunity(self):
@@ -105,7 +108,9 @@ class TorrentWindow(pyxbmct.AddonDialogWindow):
     @triblertunnelcommunity.setter
     def triblertunnelcommunity(self, value):
         self.__triblertunnelcommunity = value
-        self.tunnelc_label.setLabel("Tunnel Community: %s" % len(self.triblertunnelcommunity))
+        self.tunnelc_label.setLabel(
+            f"Tunnel Community: {len(self.triblertunnelcommunity)}"
+        )
 
     @property
     def dhtdiscoverycommunity(self):
@@ -114,7 +119,7 @@ class TorrentWindow(pyxbmct.AddonDialogWindow):
     @dhtdiscoverycommunity.setter
     def dhtdiscoverycommunity(self, value):
         self.__dhtdiscoverycommunity = value
-        self.dhtc_label.setLabel("DHT Community: %s" % len(self.dhtdiscoverycommunity))
+        self.dhtc_label.setLabel(f"DHT Community: {len(self.dhtdiscoverycommunity)}")
 
     @property
     def discoverycommunity(self):
@@ -123,7 +128,9 @@ class TorrentWindow(pyxbmct.AddonDialogWindow):
     @discoverycommunity.setter
     def discoverycommunity(self, value):
         self.__discoverycommunity = value
-        self.discoverc_label.setLabel("Discovery Community: %s" % len(self.discoverycommunity))
+        self.discoverc_label.setLabel(
+            f"Discovery Community: {len(self.discoverycommunity)}"
+        )
 
     @property
     def hops(self):
@@ -196,10 +203,8 @@ class TorrentWindow(pyxbmct.AddonDialogWindow):
             if self.hasdownload:
                 self.updatewithdownload()
             if self.vodmode and self.prebuff == 1 and self.header == 1 and self.footer == 1:
-                self.streamurl = "%s/downloads/%s/stream/%s?apikey=%s" % (config.address,
-                                                                          self.infohash,
-                                                                          self.fileindex,
-                                                                          config.get("http_api", "key"))
+                self.streamurl = f'{config.address}/downloads/{self.infohash}/stream/{self.fileindex}?apikey={config.get("http_api", "key")}'
+
                 self.streamname = download.files(self.infohash)[self.fileindex]["name"]
                 self.close()
             circuits = ipv8.circuits()
@@ -216,8 +221,8 @@ class TorrentWindow(pyxbmct.AddonDialogWindow):
         start = stop = stream = peers = recheck = meta = False
         if self.hasmeta:
             stream = True
-        if self.hasmeta and (self.isstopped or not self.hasdownload):
-            start = True
+            if (self.isstopped or not self.hasdownload):
+                start = True
         if self.hasdownload and not self.isstopped:
             stop = True
         if self.hasdownload and self.state not in ["DLSTATUS_ALLOCATING_DISKSPACE", "DLSTATUS_WAITING4HASHCHECK", "DLSTATUS_HASHCHECKING"]:
@@ -508,35 +513,34 @@ class TorrentWindow(pyxbmct.AddonDialogWindow):
         pass
 
     def on_button_querymetadata(self):
-        if self.uri:
-            self.button_querymeta.setEnabled(False)
-            tinfo = containers.common.metadataquery(self.uri, None, self.hops, progress_callback=Progress("Metadata Update",
-                                                                                                          self,
-                                                                                                          self.progress_prebuff_label,
-                                                                                                          self.progress_prebuff))
-            files = []
-            infohash = tinfo.get("infohash")
-            if tinfo and tinfo.get("info"):
-                if not self.infohash and infohash:
-                    self.infohash = infohash
-                tinfo = tinfo["info"]
-                self.setWindowTitle(tinfo.get("name", self.infohash))
-                lof = tinfo.get("files")
-                if lof:
-                    files = [{"name": os.path.join(*x["path"]), "size":x["length"]} for x in lof]
-                else:
-                    files = [{"name": tinfo["name"], "size": tinfo["length"]}]
-            self.updatefiles(files)
+        if not self.uri:
+            return
+        self.button_querymeta.setEnabled(False)
+        tinfo = containers.common.metadataquery(self.uri, None, self.hops, progress_callback=Progress("Metadata Update",
+                                                                                                      self,
+                                                                                                      self.progress_prebuff_label,
+                                                                                                      self.progress_prebuff))
+        files = []
+        infohash = tinfo.get("infohash")
+        if tinfo and tinfo.get("info"):
+            if not self.infohash and infohash:
+                self.infohash = infohash
+            tinfo = tinfo["info"]
+            self.setWindowTitle(tinfo.get("name", self.infohash))
+            if lof := tinfo.get("files"):
+                files = [{"name": os.path.join(*x["path"]), "size":x["length"]} for x in lof]
+            else:
+                files = [{"name": tinfo["name"], "size": tinfo["length"]}]
+        self.updatefiles(files)
 
     def updatefiles(self, files):
         if files:
             self.file_list.reset()
-            self.totalfiles.setLabel("%s Files" % len(files))
+            self.totalfiles.setLabel(f"{len(files)} Files")
             totalsize = 0
             for subfile in files:
                 totalsize += subfile["size"]
-                self.file_list.addItem("%s (%s)" % (subfile["name"],
-                                                    format_size(subfile["size"])))
+                self.file_list.addItem(f'{subfile["name"]} ({format_size(subfile["size"])})')
             self.totalsize.setLabel(format_size(totalsize))
             self.hasmeta = True
         else:
@@ -560,14 +564,14 @@ class TorrentWindow(pyxbmct.AddonDialogWindow):
         peers = 0
         for tracker, trackerinfo in trackers:
             if "error" in trackerinfo:
-                sp = "E:%s" % trackerinfo["error"]
+                sp = f'E:{trackerinfo["error"]}'
             else:
                 seeder = trackerinfo.get("seeders", 0)
                 peer = trackerinfo.get("leechers", 0)
-                sp = "S:%sP:%s" % (seeder, peer)
+                sp = f"S:{seeder}P:{peer}"
                 seeders += seeder
                 peers += peer
-            self.tracker_list.addItem("%s %s" % (tracker, sp))
+            self.tracker_list.addItem(f"{tracker} {sp}")
         if updatepeers:
             self.seeders.setLabel(str(seeders))
             self.peers.setLabel(str(peers))
@@ -593,13 +597,16 @@ class TorrentWindow(pyxbmct.AddonDialogWindow):
                     else:
                         self.status.setLabel(defs.dl_states[self.state])
                     self.totalsize.setLabel(format_size(dload["size"]))
-                    self.peers.setLabel("%s/%s" % (dload["num_connected_peers"], dload["num_peers"]))
-                    self.seeders.setLabel("%s/%s" % (dload["num_connected_seeds"], dload["num_seeds"]))
+                    self.peers.setLabel(f'{dload["num_connected_peers"]}/{dload["num_peers"]}')
+                    self.seeders.setLabel(f'{dload["num_connected_seeds"]}/{dload["num_seeds"]}')
                     self.size_downloaded.setLabel(format_size(dload["total_down"]))
                     self.size_uploaded.setLabel(format_size(dload["total_up"]))
-                    if not self.anonimitylock and not self.hops == dload["hops"]:
+                    if not self.anonimitylock and self.hops != dload["hops"]:
                         self.hops = dload["hops"]
-                    if not self.anonimitylock and not self.anonupload == dload["safe_seeding"]:
+                    if (
+                        not self.anonimitylock
+                        and self.anonupload != dload["safe_seeding"]
+                    ):
                         self.anonupload = dload["safe_seeding"]
                     self.total = dload["progress"]
                     self.prebuff = dload["vod_prebuffering_progress"]
@@ -634,11 +641,5 @@ class Progress():
 
 def fileindex(infohash):
     lof = [x["name"] for x in download.files(infohash)]
-    if len(lof) == 1:
-        findex = 0
-    else:
-        findex = gui.select("Select File", lof)
-    if int(findex) < 0:
-        return None
-    else:
-        return findex
+    findex = 0 if len(lof) == 1 else gui.select("Select File", lof)
+    return None if int(findex) < 0 else findex

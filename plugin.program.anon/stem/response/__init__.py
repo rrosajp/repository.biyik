@@ -117,7 +117,7 @@ def convert(response_type, message, **kwargs):
   try:
     response_class = response_types[response_type]
   except TypeError:
-    raise TypeError('Unsupported response type: %s' % response_type)
+    raise TypeError(f'Unsupported response type: {response_type}')
 
   message.__class__ = response_class
   message._parse_message(**kwargs)
@@ -181,11 +181,7 @@ class ControlMessage(object):
     :returns: **True** if any lines have a 250 response code, **False** otherwise
     """
 
-    for code, _, _ in self._parsed_content:
-      if code == '250':
-        return True
-
-    return False
+    return any(code == '250' for code, _, _ in self._parsed_content)
 
   def content(self, get_bytes = False):
     """
@@ -322,8 +318,8 @@ class ControlLine(str):
   immutable). All methods are thread safe.
   """
 
-  def __new__(self, value):
-    return str.__new__(self, value)
+  def __new__(cls, value):
+    return str.__new__(cls, value)
 
   def __init__(self, value):
     self._remainder = value
@@ -373,9 +369,7 @@ class ControlLine(str):
     """
 
     remainder = self._remainder  # temp copy to avoid locking
-    key_match = KEY_ARG.match(remainder)
-
-    if key_match:
+    if key_match := KEY_ARG.match(remainder):
       if key and key != key_match.groups()[0]:
         return False
 
@@ -397,9 +391,7 @@ class ControlLine(str):
     """
 
     remainder = self._remainder
-    key_match = KEY_ARG.match(remainder)
-
-    if key_match:
+    if key_match := KEY_ARG.match(remainder):
       return key_match.groups()[0]
     else:
       return None
@@ -502,13 +494,12 @@ def _parse_entry(line, quoted, escaped, get_bytes):
     if start_quote != 0 or end_quote == -1:
       raise ValueError("the next entry isn't a quoted value: " + line)
 
-    next_entry, remainder = remainder[1:end_quote], remainder[end_quote + 1:]
-  else:
-    # non-quoted value, just need to check if there's more data afterward
-    if ' ' in remainder:
-      next_entry, remainder = remainder.split(' ', 1)
     else:
-      next_entry, remainder = remainder, ''
+      next_entry, remainder = remainder[1:end_quote], remainder[end_quote + 1:]
+  elif ' ' in remainder:
+    next_entry, remainder = remainder.split(' ', 1)
+  else:
+    next_entry, remainder = remainder, ''
 
   if escaped:
     # Tor does escaping in its 'esc_for_log' function of 'common/util.c'. It's

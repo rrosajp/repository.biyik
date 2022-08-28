@@ -17,7 +17,8 @@ class Platform(linux.Platform):
             yield "Docker needs to be installed through 'service.system.docker' addon.\nIf you have installed it your device may need a reboot for docker to be available"
 
     def start_tor(self):
-        cmdline = "docker run -v %s:/etc/tor/torrc:ro --net host --name tor amgxv/tor:stable" % self.torrc
+        cmdline = f"docker run -v {self.torrc}:/etc/tor/torrc:ro --net host --name tor amgxv/tor:stable"
+
         return linux.Platform.start_tor(self, cmdline)
 
     def stop_tor(self):

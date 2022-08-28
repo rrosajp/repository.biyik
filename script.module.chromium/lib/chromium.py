@@ -39,8 +39,8 @@ class Browser:
             self.close()
 
     def open(self):
-        self.url = "http://127.0.0.1:%s" % self.port
-        d = json.loads(urlopen("%s/json/new" % self.url).read())
+        self.url = f"http://127.0.0.1:{self.port}"
+        d = json.loads(urlopen(f"{self.url}/json/new").read())
         self.tabid = d["id"]
         self.wsurl = d["webSocketDebuggerUrl"]
         self.connect()
@@ -50,7 +50,10 @@ class Browser:
         if self.useragent:
             self.command("Network.setUserAgentOverride", userAgent=self.useragent)
         else:
-            self.useragent = json.loads(urlopen("%s/json/version" % self.url).read())["User-Agent"]
+            self.useragent = json.loads(
+                urlopen(f"{self.url}/json/version").read()
+            )["User-Agent"]
+
         self.command("DOM.enable")
 
     def connect(self):
@@ -60,7 +63,7 @@ class Browser:
     def command(self, method, **kwargs):
         self.id += 1
         if self.debug:
-            print("Command (%s): %s, %s" % (self.id, method, kwargs))
+            print(f"Command ({self.id}): {method}, {kwargs}")
         self.connect()
         self.ws.send(json.dumps({"id": self.id, "method": method, "params": kwargs}))
         return self.id
@@ -92,9 +95,12 @@ class Browser:
                 cookies = m["result"]["cookies"]
                 break
 
-        return {"User-Agent": self.useragent,
-                "cookie": "; ".join(["%s=%s" % (c["name"], quote(c["value"])) for c in cookies])
-                }
+        return {
+            "User-Agent": self.useragent,
+            "cookie": "; ".join(
+                [f'{c["name"]}={quote(c["value"])}' for c in cookies]
+            ),
+        }
 
     def _get_elem_js(self, tag=None, name=None, eid=None, index=0):
         js = None
@@ -105,19 +111,17 @@ class Browser:
         elif eid:
             js = 'document.getElementsById("%s")' % eid
         if js:
-            js += "[%s]" % index
+            js += f"[{index}]"
             return js
 
     def elem_setattr(self, attr, value, tag=None, name=None, eid=None, index=0):
-        js = self._get_elem_js(tag, name, eid, index)
-        if js:
-            js += ".%s = %s" % (attr, value)
+        if js := self._get_elem_js(tag, name, eid, index):
+            js += f".{attr} = {value}"
             return self.evaljs(js)
 
     def elem_call(self, method, tag=None, name=None, eid=None, index=0):
-        js = self._get_elem_js(tag, name, eid, index)
-        if js:
-            js += ".%s()" % method
+        if js := self._get_elem_js(tag, name, eid, index):
+            js += f".{method}()"
             return self.evaljs(js)
 
     def evaljs(self, js):
@@ -152,11 +156,7 @@ class Browser:
                     nhtml = message.get("result", {}).get("outerHTML")
                     if validate:
                         try:
-                            isvalid = validate(nhtml)
-                            if isvalid:
-                                html = isvalid
-                            else:
-                                html = None
+                            html = isvalid if (isvalid := validate(nhtml)) else None
                         except Exception:
                             html = None
                     else:
@@ -164,9 +164,8 @@ class Browser:
                     if html:
                         if hasslept:
                             break
-                        else:
-                            time.sleep(self.loadtimeout)
-                            hasslept = True
+                        time.sleep(self.loadtimeout)
+                        hasslept = True
                 node = None
                 doc_comid = self.command("DOM.getDocument")
                 lock = True
@@ -201,4 +200,4 @@ class Browser:
 
     def close(self):
         self.ws.close()
-        urlopen("%s/json/close/%s" % (self.url, self.tabid)).read()
+        urlopen(f"{self.url}/json/close/{self.tabid}").read()

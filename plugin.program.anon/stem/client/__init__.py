@@ -222,8 +222,7 @@ class Relay(object):
     self._orport.send(cell.pack(self.link_protocol))
     response = self._orport.recv(timeout = 1)
 
-    for received_cell in stem.client.cell.Cell.pop(response, self.link_protocol):
-      yield received_cell
+    yield from stem.client.cell.Cell.pop(response, self.link_protocol)
 
   def is_alive(self):
     """
@@ -265,13 +264,11 @@ class Relay(object):
       circ_id = max(self._circuits) + 1 if self._circuits else self.link_protocol.first_circ_id
 
       create_fast_cell = stem.client.cell.CreateFastCell(circ_id)
-      created_fast_cell = None
-
-      for cell in self._msg(create_fast_cell):
-        if isinstance(cell, stem.client.cell.CreatedFastCell):
-          created_fast_cell = cell
-          break
-
+      created_fast_cell = next(
+          (cell for cell in self._msg(create_fast_cell)
+           if isinstance(cell, stem.client.cell.CreatedFastCell)),
+          None,
+      )
       if not created_fast_cell:
         raise ValueError('We should get a CREATED_FAST response from a CREATE_FAST request')
 
@@ -287,8 +284,7 @@ class Relay(object):
 
   def __iter__(self):
     with self._orport_lock:
-      for circ in self._circuits.values():
-        yield circ
+      yield from self._circuits.values()
 
   def __enter__(self):
     return self

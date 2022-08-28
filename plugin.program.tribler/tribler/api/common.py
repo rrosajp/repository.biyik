@@ -35,30 +35,31 @@ def localconfig():
         if config:
             break
         version_dir_check = re.search("[0-9\.]+", version_dir)
-        if version_dir_check and version_dir == version_dir_check.group(0):
-            # TO-DO: always use latest
-            # receive config path from settings
-            if LooseVersion(version_dir) >= LooseVersion(MIN_TRIBLER_VERSION):
-                subdir = os.path.join(base_dir, version_dir)
-                if os.path.isdir(subdir):
-                    for subfile in os.listdir(subdir):
-                        if subfile == "triblerd.conf":
-                            try:
-                                conffile = os.path.join(subdir, subfile)
-                                config = configparser.ConfigParser()
-                                config.read(conffile)
-                                config.address = None
-                                for key in ("port", "http_port"):
-                                    for section in ("http_api", "api"):
-                                        try:
-                                            config.address = "http://localhost:%s" % config.get(section, key)
-                                        except (configparser.NoSectionError, configparser.NoOptionError):
-                                            # print(traceback.format_exc())
-                                            continue
-                                        print("using config from: %s" % conffile)
-                                        break
-                            except Exception:
-                                print(traceback.format_exc())
+        if (
+            version_dir_check
+            and version_dir == version_dir_check[0]
+            and LooseVersion(version_dir) >= LooseVersion(MIN_TRIBLER_VERSION)
+        ):
+            subdir = os.path.join(base_dir, version_dir)
+            if os.path.isdir(subdir):
+                for subfile in os.listdir(subdir):
+                    if subfile == "triblerd.conf":
+                        try:
+                            conffile = os.path.join(subdir, subfile)
+                            config = configparser.ConfigParser()
+                            config.read(conffile)
+                            config.address = None
+                            for key in ("port", "http_port"):
+                                for section in ("http_api", "api"):
+                                    try:
+                                        config.address = f"http://localhost:{config.get(section, key)}"
+                                    except (configparser.NoSectionError, configparser.NoOptionError):
+                                        # print(traceback.format_exc())
+                                        continue
+                                    print(f"using config from: {conffile}")
+                                    break
+                        except Exception:
+                            print(traceback.format_exc())
     return section, config
 
 
@@ -67,7 +68,9 @@ class remoteconfig(object):
         if address.endswith("/"):
             address = address[:-1]
         self.address = address
-        self.js = net.http(address + "/settings", headers={"X-Api-Key": apikey}, json=True)
+        self.js = net.http(
+            f"{address}/settings", headers={"X-Api-Key": apikey}, json=True
+        )
 
     def get(self, group, stg):
         return self.js["settings"].get(group, {}).get(stg)
@@ -79,7 +82,7 @@ if settings.getstr("conmode").lower() == "remote":
         config = remoteconfig(settings.getstr("address"), settings.getstr("apikey"))
     except Exception:
         print(traceback.format_exc())
-        gui.ok("Tribler", "Can not connect to daemon at %s" % settings.getstr("address"))
+        gui.ok("Tribler", f'Can not connect to daemon at {settings.getstr("address")}')
 else:
     try:
         API_SECTION, config = localconfig()
@@ -90,7 +93,7 @@ else:
 
 
 def call(method, endpoint, **data):
-    url = "%s/%s" % (config.address, endpoint)
+    url = f"{config.address}/{endpoint}"
     headers = {"X-Api-Key": config.get(API_SECTION, "key")}
     if method in ["GET"] or method == "PUT" and endpoint == "remote_query":
         params = data
@@ -102,21 +105,20 @@ def call(method, endpoint, **data):
     try:
         resp = net.http(url, timeout=defs.HTTP_TIMEOUT, params=params, headers=headers, json=js, method=method)
     except ReadTimeout:
-        resp = {"error": "Read timeout out in %s seconds" % HTTP_TIMEOUT}
-    if "error" in resp:
-        if isinstance(resp["error"], dict):
-            title = resp["error"].get("code", "ERROR")
-            msg = resp["error"].get("message", "Unknown Error")
-        else:
-            title = "ERROR"
-            msg = str(resp["error"])
-        gui.ok(title, msg)
-    else:
+        resp = {"error": f"Read timeout out in {HTTP_TIMEOUT} seconds"}
+    if "error" not in resp:
         return resp
+    if isinstance(resp["error"], dict):
+        title = resp["error"].get("code", "ERROR")
+        msg = resp["error"].get("message", "Unknown Error")
+    else:
+        title = "ERROR"
+        msg = str(resp["error"])
+    gui.ok(title, msg)
 
 
 def makemagnet(infohash):
-    return "magnet:?xt=urn:btih:%s" % infohash
+    return f"magnet:?xt=urn:btih:{infohash}"
 
 
 def format_size(num, suffix='B'):
@@ -129,7 +131,7 @@ def format_size(num, suffix='B'):
 
 class event(object):
     def __init__(self, timeout):
-        self.url = "%s/events" % config.address
+        self.url = f"{config.address}/events"
         self.headers = {"X-Api-Key": config.get(API_SECTION, "key")}
         self.timeout = timeout
         self.prepare()

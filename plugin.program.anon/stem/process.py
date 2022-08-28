@@ -155,7 +155,7 @@ def launch_tor(tor_cmd = 'tor', args = None, torrc_path = None, completion_perce
       # this will provide empty results if the process is terminated
 
       if not init_line:
-        raise OSError('Process terminated: %s' % last_problem)
+        raise OSError(f'Process terminated: {last_problem}')
 
       # provide the caller with the initialization message if they want it
 
@@ -167,7 +167,7 @@ def launch_tor(tor_cmd = 'tor', args = None, torrc_path = None, completion_perce
       bootstrap_match = bootstrap_line.search(init_line)
       problem_match = problem_line.search(init_line)
 
-      if bootstrap_match and int(bootstrap_match.group(1)) >= completion_percent:
+      if bootstrap_match and int(bootstrap_match[1]) >= completion_percent:
         return tor_process
       elif problem_match:
         runlevel, msg = problem_match.groups()
@@ -262,13 +262,7 @@ def launch_tor_with_config(config, tor_cmd = 'tor', completion_percent = 100, in
     if isinstance(config['Log'], str):
       config['Log'] = [config['Log']]
 
-    has_stdout = False
-
-    for log_config in config['Log']:
-      if log_config in stdout_options:
-        has_stdout = True
-        break
-
+    has_stdout = any(log_config in stdout_options for log_config in config['Log'])
     if not has_stdout:
       config['Log'].append('NOTICE stdout')
 
@@ -283,20 +277,19 @@ def launch_tor_with_config(config, tor_cmd = 'tor', completion_percent = 100, in
 
   if use_stdin:
     return launch_tor(tor_cmd, ['-f', '-'], None, completion_percent, init_msg_handler, timeout, take_ownership, close_output, stdin = config_str)
-  else:
-    torrc_descriptor, torrc_path = tempfile.mkstemp(prefix = 'torrc-', text = True)
+  torrc_descriptor, torrc_path = tempfile.mkstemp(prefix = 'torrc-', text = True)
 
+  try:
+    with open(torrc_path, 'w') as torrc_file:
+      torrc_file.write(config_str)
+
+    # prevents tor from erroring out due to a missing torrc if it gets a sighup
+    args = ['__ReloadTorrcOnSIGHUP', '0']
+
+    return launch_tor(tor_cmd, args, torrc_path, completion_percent, init_msg_handler, timeout, take_ownership)
+  finally:
     try:
-      with open(torrc_path, 'w') as torrc_file:
-        torrc_file.write(config_str)
-
-      # prevents tor from erroring out due to a missing torrc if it gets a sighup
-      args = ['__ReloadTorrcOnSIGHUP', '0']
-
-      return launch_tor(tor_cmd, args, torrc_path, completion_percent, init_msg_handler, timeout, take_ownership)
-    finally:
-      try:
-        os.close(torrc_descriptor)
-        os.remove(torrc_path)
-      except:
-        pass
+      os.close(torrc_descriptor)
+      os.remove(torrc_path)
+    except:
+      pass

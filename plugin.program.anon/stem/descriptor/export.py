@@ -108,8 +108,12 @@ def export_csv_file(output_file, descriptors, included_fields = (), excluded_fie
 
   for desc in descriptors:
     if not isinstance(desc, stem.descriptor.Descriptor):
-      raise ValueError('Unable to export a descriptor CSV since %s is not a descriptor.' % type(desc).__name__)
+      raise ValueError(
+          f'Unable to export a descriptor CSV since {type(desc).__name__} is not a descriptor.'
+      )
     elif descriptor_type != type(desc):
-      raise ValueError('To export a descriptor CSV all of the descriptors must be of the same type. First descriptor was a %s but we later got a %s.' % (descriptor_type_label, type(desc)))
+      raise ValueError(
+          f'To export a descriptor CSV all of the descriptors must be of the same type. First descriptor was a {descriptor_type_label} but we later got a {type(desc)}.'
+      )
 
     writer.writerow(vars(desc))

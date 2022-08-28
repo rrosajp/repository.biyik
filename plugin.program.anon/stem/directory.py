@@ -97,9 +97,7 @@ def _match_with(lines, regexes, required = None):
 
   for line in lines:
     for matcher in regexes:
-      m = matcher.search(str_tools._to_unicode(line))
-
-      if m:
+      if m := matcher.search(str_tools._to_unicode(line)):
         match_groups = m.groups()
         matches[matcher] = match_groups if len(match_groups) > 1 else match_groups[0]
 
@@ -112,11 +110,8 @@ def _match_with(lines, regexes, required = None):
 
 
 def _directory_entries(lines, pop_section_func, regexes, required = None):
-  next_section = pop_section_func(lines)
-
-  while next_section:
+  while next_section := pop_section_func(lines):
     yield _match_with(next_section, regexes, required)
-    next_section = pop_section_func(lines)
 
 
 class Directory(object):
@@ -144,26 +139,28 @@ class Directory(object):
   """
 
   def __init__(self, address, or_port, dir_port, fingerprint, nickname, orport_v6):
-    identifier = '%s (%s)' % (fingerprint, nickname) if nickname else fingerprint
+    identifier = f'{fingerprint} ({nickname})' if nickname else fingerprint
 
     if not connection.is_valid_ipv4_address(address):
-      raise ValueError('%s has an invalid IPv4 address: %s' % (identifier, address))
+      raise ValueError(f'{identifier} has an invalid IPv4 address: {address}')
     elif not connection.is_valid_port(or_port):
-      raise ValueError('%s has an invalid ORPort: %s' % (identifier, or_port))
+      raise ValueError(f'{identifier} has an invalid ORPort: {or_port}')
     elif not connection.is_valid_port(dir_port):
-      raise ValueError('%s has an invalid DirPort: %s' % (identifier, dir_port))
+      raise ValueError(f'{identifier} has an invalid DirPort: {dir_port}')
     elif not tor_tools.is_valid_fingerprint(fingerprint):
-      raise ValueError('%s has an invalid fingerprint: %s' % (identifier, fingerprint))
+      raise ValueError(f'{identifier} has an invalid fingerprint: {fingerprint}')
     elif nickname and not tor_tools.is_valid_nickname(nickname):
-      raise ValueError('%s has an invalid nickname: %s' % (fingerprint, nickname))
+      raise ValueError(f'{fingerprint} has an invalid nickname: {nickname}')
 
     if orport_v6:
       if not isinstance(orport_v6, tuple) or len(orport_v6) != 2:
-        raise ValueError('%s orport_v6 should be a two value tuple: %s' % (identifier, str(orport_v6)))
+        raise ValueError(
+            f'{identifier} orport_v6 should be a two value tuple: {str(orport_v6)}'
+        )
       elif not connection.is_valid_ipv6_address(orport_v6[0]):
-        raise ValueError('%s has an invalid IPv6 address: %s' % (identifier, orport_v6[0]))
+        raise ValueError(f'{identifier} has an invalid IPv6 address: {orport_v6[0]}')
       elif not connection.is_valid_port(orport_v6[1]):
-        raise ValueError('%s has an invalid IPv6 port: %s' % (identifier, orport_v6[1]))
+        raise ValueError(f'{identifier} has an invalid IPv6 port: {orport_v6[1]}')
 
     self.address = address
     self.or_port = int(or_port)
@@ -252,8 +249,8 @@ class Authority(Directory):
     super(Authority, self).__init__(address, or_port, dir_port, fingerprint, nickname, orport_v6)
 
     if v3ident and not tor_tools.is_valid_fingerprint(v3ident):
-      identifier = '%s (%s)' % (fingerprint, nickname) if nickname else fingerprint
-      raise ValueError('%s has an invalid v3ident: %s' % (identifier, v3ident))
+      identifier = f'{fingerprint} ({nickname})' if nickname else fingerprint
+      raise ValueError(f'{identifier} has an invalid v3ident: {v3ident}')
 
     self.v3ident = v3ident
     self.is_bandwidth_authority = is_bandwidth_authority
@@ -379,14 +376,14 @@ class Fallback(Directory):
 
     results = {}
 
-    for fingerprint in set([key.split('.')[0] for key in conf.keys()]):
+    for fingerprint in {key.split('.')[0] for key in conf.keys()}:
       if fingerprint in ('tor_commit', 'stem_commit', 'header'):
         continue
 
       attr = {}
 
       for attr_name in ('address', 'or_port', 'dir_port', 'nickname', 'has_extrainfo', 'orport6_address', 'orport6_port'):
-        key = '%s.%s' % (fingerprint, attr_name)
+        key = f'{fingerprint}.{attr_name}'
         attr[attr_name] = conf.get(key)
 
         if not attr[attr_name] and attr_name not in ('nickname', 'has_extrainfo', 'orport6_address', 'orport6_port'):
@@ -425,17 +422,17 @@ class Fallback(Directory):
     # header metadata
 
     if lines[0] != '/* type=fallback */':
-      raise IOError('%s does not have a type field indicating it is fallback directory metadata' % GITWEB_FALLBACK_URL)
+      raise IOError(
+          f'{GITWEB_FALLBACK_URL} does not have a type field indicating it is fallback directory metadata'
+      )
 
     header = {}
 
     for line in Fallback._pop_section(lines):
-      mapping = FALLBACK_MAPPING.match(line)
-
-      if mapping:
+      if mapping := FALLBACK_MAPPING.match(line):
         header[mapping.group(1)] = mapping.group(2)
       else:
-        raise IOError('Malformed fallback directory header line: %s' % line)
+        raise IOError(f'Malformed fallback directory header line: {line}')
 
     Fallback._pop_section(lines)  # skip human readable comments
 
@@ -505,19 +502,22 @@ class Fallback(Directory):
     conf.set('stem_commit', stem_commit)
 
     for k, v in headers.items():
-      conf.set('header.%s' % k, v)
+      conf.set(f'header.{k}', v)
 
     for directory in sorted(fallbacks.values(), key = lambda x: x.fingerprint):
       fingerprint = directory.fingerprint
-      conf.set('%s.address' % fingerprint, directory.address)
-      conf.set('%s.or_port' % fingerprint, str(directory.or_port))
-      conf.set('%s.dir_port' % fingerprint, str(directory.dir_port))
-      conf.set('%s.nickname' % fingerprint, directory.nickname)
-      conf.set('%s.has_extrainfo' % fingerprint, 'true' if directory.has_extrainfo else 'false')
+      conf.set(f'{fingerprint}.address', directory.address)
+      conf.set(f'{fingerprint}.or_port', str(directory.or_port))
+      conf.set(f'{fingerprint}.dir_port', str(directory.dir_port))
+      conf.set(f'{fingerprint}.nickname', directory.nickname)
+      conf.set(
+          f'{fingerprint}.has_extrainfo',
+          'true' if directory.has_extrainfo else 'false',
+      )
 
       if directory.orport_v6:
-        conf.set('%s.orport6_address' % fingerprint, str(directory.orport_v6[0]))
-        conf.set('%s.orport6_port' % fingerprint, str(directory.orport_v6[1]))
+        conf.set(f'{fingerprint}.orport6_address', str(directory.orport_v6[0]))
+        conf.set(f'{fingerprint}.orport6_port', str(directory.orport_v6[1]))
 
     conf.save(path)
 
@@ -546,18 +546,18 @@ def _fallback_directory_differences(previous_directories, new_directories):
     orport_v6 = '%s:%s' % directory.orport_v6 if directory.orport_v6 else '[none]'
 
     lines += [
-      '* Added %s as a new fallback directory:' % directory.fingerprint,
-      '  address: %s' % directory.address,
-      '  or_port: %s' % directory.or_port,
-      '  dir_port: %s' % directory.dir_port,
-      '  nickname: %s' % directory.nickname,
-      '  has_extrainfo: %s' % directory.has_extrainfo,
-      '  orport_v6: %s' % orport_v6,
-      '',
+        f'* Added {directory.fingerprint} as a new fallback directory:',
+        f'  address: {directory.address}',
+        f'  or_port: {directory.or_port}',
+        f'  dir_port: {directory.dir_port}',
+        f'  nickname: {directory.nickname}',
+        f'  has_extrainfo: {directory.has_extrainfo}',
+        f'  orport_v6: {orport_v6}',
+        '',
     ]
 
   for fp in removed_fp:
-    lines.append('* Removed %s as a fallback directory' % fp)
+    lines.append(f'* Removed {fp} as a fallback directory')
 
   for fp in new_directories:
     if fp in added_fp or fp in removed_fp:
@@ -572,7 +572,7 @@ def _fallback_directory_differences(previous_directories, new_directories):
         new_attr = getattr(new_directory, attr)
 
         if old_attr != new_attr:
-          lines.append('* Changed the %s of %s from %s to %s' % (attr, fp, old_attr, new_attr))
+          lines.append(f'* Changed the {attr} of {fp} from {old_attr} to {new_attr}')
 
   return '\n'.join(lines)
 

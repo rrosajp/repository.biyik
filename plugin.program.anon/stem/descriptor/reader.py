@@ -116,7 +116,9 @@ class AlreadyRead(FileSkipped):
   """
 
   def __init__(self, last_modified, last_modified_when_read):
-    super(AlreadyRead, self).__init__('File has already been read since it was last modified. modification time: %s, last read: %s' % (last_modified, last_modified_when_read))
+    super(AlreadyRead, self).__init__(
+        f'File has already been read since it was last modified. modification time: {last_modified}, last read: {last_modified_when_read}'
+    )
     self.last_modified = last_modified
     self.last_modified_when_read = last_modified_when_read
 
@@ -185,14 +187,14 @@ def load_processed_files(path):
   processed_files = {}
 
   with open(path, 'rb') as input_file:
-    for line in input_file.readlines():
+    for line in input_file:
       line = stem.util.str_tools._to_unicode(line.strip())
 
       if not line:
         continue  # skip blank lines
 
       if ' ' not in line:
-        raise TypeError('Malformed line: %s' % line)
+        raise TypeError(f'Malformed line: {line}')
 
       path, timestamp = line.rsplit(' ', 1)
 
@@ -235,7 +237,7 @@ def save_processed_files(path, processed_files):
   with open(path, 'w') as output_file:
     for path, timestamp in list(processed_files.items()):
       if not os.path.isabs(path):
-        raise TypeError('Only absolute paths are acceptable: %s' % path)
+        raise TypeError(f'Only absolute paths are acceptable: {path}')
 
       output_file.write('%s %i\n' % (path, timestamp))
 
@@ -325,7 +327,10 @@ class DescriptorReader(object):
     """
 
     # make sure that we only provide back absolute paths
-    return dict((os.path.abspath(k), v) for (k, v) in list(self._processed_files.items()))
+    return {
+        os.path.abspath(k): v
+        for (k, v) in list(self._processed_files.items())
+    }
 
   def set_processed_files(self, processed_files):
     """
@@ -389,11 +394,10 @@ class DescriptorReader(object):
     with self._reader_thread_lock:
       if self._reader_thread:
         raise ValueError('Already running, you need to call stop() first')
-      else:
-        self._is_stopped.clear()
-        self._reader_thread = threading.Thread(target = self._read_descriptor_files, name='Descriptor reader')
-        self._reader_thread.setDaemon(True)
-        self._reader_thread.start()
+      self._is_stopped.clear()
+      self._reader_thread = threading.Thread(target = self._read_descriptor_files, name='Descriptor reader')
+      self._reader_thread.setDaemon(True)
+      self._reader_thread.start()
 
   def stop(self):
     """
@@ -549,9 +553,7 @@ class DescriptorReader(object):
               desc._set_archive_path(tar_entry.name)
               self._unreturned_descriptors.put(desc)
               self._iter_notice.set()
-          except TypeError as exc:
-            self._notify_skip_listeners(target, ParsingFailure(exc))
-          except ValueError as exc:
+          except (TypeError, ValueError) as exc:
             self._notify_skip_listeners(target, ParsingFailure(exc))
           finally:
             entry.close()

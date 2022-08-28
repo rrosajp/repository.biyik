@@ -121,10 +121,7 @@ def logging_level(runlevel):
   :param stem.util.log.Runlevel runlevel: runlevel to be returned, no logging if **None**
   """
 
-  if runlevel:
-    return LOG_VALUES[runlevel]
-  else:
-    return logging.FATAL + 5
+  return LOG_VALUES[runlevel] if runlevel else logging.FATAL + 5
 
 
 def is_tracing():
@@ -136,11 +133,8 @@ def is_tracing():
   :returns: **True** if we're logging at the trace runlevel and **False** otherwise
   """
 
-  for handler in get_logger().handlers:
-    if handler.level <= logging_level(TRACE):
-      return True
-
-  return False
+  return any(handler.level <= logging_level(TRACE)
+             for handler in get_logger().handlers)
 
 
 def escape(message):
@@ -188,9 +182,8 @@ def log_once(message_id, runlevel, message):
 
   if not runlevel or message_id in DEDUPLICATION_MESSAGE_IDS:
     return False
-  else:
-    DEDUPLICATION_MESSAGE_IDS.add(message_id)
-    log(runlevel, message)
+  DEDUPLICATION_MESSAGE_IDS.add(message_id)
+  log(runlevel, message)
 
 # shorter aliases for logging at a runlevel
 

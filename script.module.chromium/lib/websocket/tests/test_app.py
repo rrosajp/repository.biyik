@@ -21,11 +21,12 @@ Copyright (C) 2010 Hiroki Ohtani(liris)
 
 """
 
+
 import os
 import os.path
 import websocket as ws
 import sys
-sys.path[0:0] = [""]
+sys.path[:0] = [""]
 
 try:
     import ssl

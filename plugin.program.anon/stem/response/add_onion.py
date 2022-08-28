@@ -31,7 +31,8 @@ class AddOnionResponse(stem.response.ControlMessage):
       raise stem.ProtocolError("ADD_ONION response didn't have an OK status: %s" % self)
 
     if not str(self).startswith('ServiceID='):
-      raise stem.ProtocolError('ADD_ONION response should start with the service id: %s' % self)
+      raise stem.ProtocolError(
+          f'ADD_ONION response should start with the service id: {self}')
 
     for line in list(self):
       if '=' in line:

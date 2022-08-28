@@ -11,6 +11,7 @@
 
     This file is provided "as is", without any warranty whatsoever. Use at your own risk
 exists"""
+
 from __future__ import print_function, absolute_import
 
 from re import sub
@@ -54,12 +55,17 @@ prefix_output = False  # Will prefix output path with an underscore
 if prefix_output:
     output_path = ''.join(['_', output_path])
 
-# Ignored files and folders:
-ignored_dirs = ['.git', '.idea', '__MACOSX', '.svn', '.vscode']
 ignored_files = ['.gitignore', 'gitattributes', '.gitkeep', '.github']
 ignored_exts = ['.pyc', '.pyo']
 
-ignored_dirs.extend([output_path, tools_path])
+ignored_dirs = [
+    '.git',
+    '.idea',
+    '__MACOSX',
+    '.svn',
+    '.vscode',
+    *[output_path, tools_path],
+]
 
 
 class Generator:
@@ -152,9 +158,9 @@ class Generator:
 
     def _generate_zip_file(self, path, version, addonid):
 
-        print("Generate zip file for " + addonid + " " + version)
+        print(f"Generate zip file for {addonid} {version}")
 
-        filename = path + "-" + version + ".zip"
+        filename = f"{path}-{version}.zip"
 
         compression = zipfile.ZIP_DEFLATED if compress else zipfile.ZIP_STORED
 
@@ -175,11 +181,7 @@ class Generator:
                 zip.write(os.path.join(root))
 
                 for file in files:
-                    skip = False
-                    for ignored_ext in ignored_exts:
-                        if file.endswith(ignored_ext):
-                            skip = True
-                            break
+                    skip = any(file.endswith(ignored_ext) for ignored_ext in ignored_exts)
                     if not skip:
                         zip.write(os.path.join(root, file))
             zip.close()
@@ -191,19 +193,20 @@ class Generator:
             output_exists = os.path.isfile(destination)
 
             if output_exists and rename_old:
-                os.rename(destination, destination + "." + datetime.datetime.now().strftime("%Y%m%d%H%M%S"))
+                os.rename(
+                    destination,
+                    f"{destination}."
+                    + datetime.datetime.now().strftime("%Y%m%d%H%M%S"),
+                )
 
-            if output_exists and overwrite_existing:
+
+            if output_exists and overwrite_existing or not output_exists:
 
                 shutil.move(filename, destination)
-
-            elif output_exists and not overwrite_existing:
-
-                os.remove(filename)
 
             else:
 
-                shutil.move(filename, destination)
+                os.remove(filename)
 
         except Exception as e:
 
@@ -250,11 +253,11 @@ class Generator:
                 addons_xml += addon_xml.rstrip() + "\n\n"
             except Exception as e:
                 # missing or poorly formatted addon.xml
-                print("Excluding %s for %s" % (_path, e,))
+                print(f"Excluding {_path} for {e}")
         # clean and add closing tag
         addons_xml = addons_xml.strip() + u"\n</addons>\n"
         # save file
-        self._save_file(addons_xml, file=output_path + "addons.xml")
+        self._save_file(addons_xml, file=f"{output_path}addons.xml")
 
     def _generate_md5_file(self):
 
@@ -265,10 +268,10 @@ class Generator:
             # create a new md5 hash
             try:
                 # noinspection PyArgumentList
-                with open(output_path + "addons.xml", encoding='utf-8') as f:
+                with open(f"{output_path}addons.xml", encoding='utf-8') as f:
                     addons_xml = f.read()
             except TypeError:
-                with open(output_path + "addons.xml") as f:
+                with open(f"{output_path}addons.xml") as f:
                     addons_xml = f.read()
 
             try:
@@ -277,10 +280,10 @@ class Generator:
                 # noinspection PyArgumentList
                 m = hashlib.md5(bytes(addons_xml, encoding='utf-8')).hexdigest()
 
-            m = m + '  ' + 'addons.xml'
+            m = f'{m}  addons.xml'
 
             # save file
-            self._save_file(m, file=output_path + "addons.xml.md5")
+            self._save_file(m, file=f"{output_path}addons.xml.md5")
         except Exception as e:
             # oops
             print("An error occurred creating addons.xml.md5 file!\n%s" % (e,))

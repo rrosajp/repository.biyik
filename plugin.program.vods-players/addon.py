@@ -31,11 +31,13 @@ class navi(container.container):
 
     def index(self):
         for [adn, aid, desc] in addons:
-            if not addon.has_addon(aid):
-                install = "[COLOR red][not installed][/COLOR]"
-            else:
-                install = "[COLOR green][installed][/COLOR]"
-            name = "%s %s - %s" % (install, adn, desc)
+            install = (
+                "[COLOR green][installed][/COLOR]"
+                if addon.has_addon(aid)
+                else "[COLOR red][not installed][/COLOR]"
+            )
+
+            name = f"{install} {adn} - {desc}"
             self.item(name).call()
 
 

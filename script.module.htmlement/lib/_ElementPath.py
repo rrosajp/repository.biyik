@@ -105,14 +105,14 @@ def prepare_child(next, token):
 def prepare_star(next, token):
     def select(context, result):
         for elem in result:
-            for e in elem:
-                yield e
+            yield from elem
+
     return select
 
 def prepare_self(next, token):
     def select(context, result):
-        for elem in result:
-            yield elem
+        yield from result
+
     return select
 
 def prepare_descendant(next, token):
@@ -195,7 +195,7 @@ def prepare_predicate(next, token):
                         yield elem
                         break
         return select
-    if signature == "-" or signature == "-()" or signature == "-()-":
+    if signature in {"-", "-()", "-()-"}:
         # [index] or [last()] or [last()-index]
         if signature == "-":
             index = int(predicate[0]) - 1
@@ -247,7 +247,7 @@ class _SelectorContext:
 def iterfind(elem, path, namespaces=None):
     # compile selector pattern
     if path[-1:] == "/":
-        path = path + "*" # implicit all (FIXME: keep this?)
+        path = f"{path}*"
     try:
         selector = _cache[path]
     except KeyError:

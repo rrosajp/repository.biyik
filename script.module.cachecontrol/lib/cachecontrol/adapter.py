@@ -39,8 +39,7 @@ class CacheControlAdapter(HTTPAdapter):
         """
         cacheable = cacheable_methods or self.cacheable_methods
         if request.method in cacheable:
-            cached_response = self.controller.cached_request(request)
-            if cached_response:
+            if cached_response := self.controller.cached_request(request):
                 return self.build_response(request, cached_response,
                                            from_cache=True)
 
@@ -49,9 +48,7 @@ class CacheControlAdapter(HTTPAdapter):
                 self.controller.conditional_headers(request)
             )
 
-        resp = super(CacheControlAdapter, self).send(request, **kw)
-
-        return resp
+        return super(CacheControlAdapter, self).send(request, **kw)
 
     def build_response(self, request, response, from_cache=False,
                        cacheable_methods=None):

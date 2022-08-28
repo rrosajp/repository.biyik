@@ -40,4 +40,4 @@ def getpath(fname):
 
 
 def log(txt, lvl=0):
-    xbmc.log("| script.module.abi | %s | %s" % (module, txt))
+    xbmc.log(f"| script.module.abi | {module} | {txt}")

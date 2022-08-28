@@ -210,7 +210,7 @@ def download(url, timeout = None, retries = None):
       log.debug('Failed to download from %s (%i retries remaining): %s' % (url, retries, exc))
       return download(url, timeout, retries - 1)
     else:
-      log.debug('Failed to download from %s: %s' % (url, exc))
+      log.debug(f'Failed to download from {url}: {exc}')
       raise stem.DownloadFailed(url, exc, stacktrace)
 
 
@@ -260,13 +260,15 @@ def get_connections(resolver = None, process_pid = None, process_name = None):
       log.debug(msg)
 
   _log('=' * 80)
-  _log('Querying connections for resolver: %s, pid: %s, name: %s' % (resolver, process_pid, process_name))
+  _log(
+      f'Querying connections for resolver: {resolver}, pid: {process_pid}, name: {process_name}'
+  )
 
   if isinstance(process_pid, str):
     try:
       process_pid = int(process_pid)
     except ValueError:
-      raise ValueError('Process pid was non-numeric: %s' % process_pid)
+      raise ValueError(f'Process pid was non-numeric: {process_pid}')
 
   if process_pid is None:
     all_pids = stem.util.system.pid_by_name(process_name, True)
@@ -291,14 +293,14 @@ def get_connections(resolver = None, process_pid = None, process_name = None):
     raise IOError("Unable to query '%s': %s" % (resolver_command, exc))
 
   resolver_regex_str = RESOLVER_FILTER[resolver].format(
-    protocol = '(?P<protocol>\\S+)',
-    local = '(?P<local>[\\[\\]0-9a-f.:]+)',
-    remote = '(?P<remote>[\\[\\]0-9a-f.:]+)',
-    pid = process_pid if process_pid else '[0-9]*',
-    name = process_name if process_name else '\\S*',
+      protocol='(?P<protocol>\\S+)',
+      local='(?P<local>[\\[\\]0-9a-f.:]+)',
+      remote='(?P<remote>[\\[\\]0-9a-f.:]+)',
+      pid=process_pid or '[0-9]*',
+      name=process_name or '\\S*',
   )
 
-  _log('Resolver regex: %s' % resolver_regex_str)
+  _log(f'Resolver regex: {resolver_regex_str}')
   _log('Resolver results:\n%s' % '\n'.join(results))
 
   connections = []
@@ -308,13 +310,13 @@ def get_connections(resolver = None, process_pid = None, process_name = None):
     addr, port = addr_str.rsplit(':', 1)
 
     if not is_valid_ipv4_address(addr) and not is_valid_ipv6_address(addr, allow_brackets = True):
-      _log('Invalid %s address (%s): %s' % (addr_type, addr, line))
+      _log(f'Invalid {addr_type} address ({addr}): {line}')
       return None, None
     elif not is_valid_port(port):
-      _log('Invalid %s port (%s): %s' % (addr_type, port, line))
+      _log(f'Invalid {addr_type} port ({port}): {line}')
       return None, None
     else:
-      _log('Valid %s:%s: %s' % (addr, port, line))
+      _log(f'Valid {addr}:{port}: {line}')
       return addr.lstrip('[').rstrip(']'), int(port)
 
   for line in results:
@@ -335,7 +337,7 @@ def get_connections(resolver = None, process_pid = None, process_name = None):
         protocol = 'tcp'
 
       if protocol not in ('tcp', 'udp'):
-        _log('Unrecognized protocol (%s): %s' % (protocol, line))
+        _log(f'Unrecognized protocol ({protocol}): {line}')
         continue
 
       conn = Connection(local_addr, local_port, remote_addr, remote_port, protocol, is_valid_ipv6_address(local_addr))
@@ -345,7 +347,7 @@ def get_connections(resolver = None, process_pid = None, process_name = None):
   _log('%i connections found' % len(connections))
 
   if not connections:
-    raise IOError('No results found using: %s' % resolver_command)
+    raise IOError(f'No results found using: {resolver_command}')
 
   return connections
 
@@ -367,23 +369,19 @@ def system_resolvers(system = None):
   """
 
   if system is None:
-    if stem.util.system.is_gentoo():
-      system = 'Gentoo'
-    else:
-      system = platform.system()
-
-  if system == 'Windows':
-    resolvers = [Resolver.NETSTAT_WINDOWS]
-  elif system == 'Darwin':
+    system = 'Gentoo' if stem.util.system.is_gentoo() else platform.system()
+  if system == 'Darwin':
     resolvers = [Resolver.LSOF]
-  elif system == 'OpenBSD':
-    resolvers = [Resolver.BSD_FSTAT]
   elif system == 'FreeBSD':
     # Netstat is available, but lacks a '-p' equivalent so we can't associate
     # the results to processes. The platform also has a ss command, but it
     # belongs to a spreadsheet application.
 
     resolvers = [Resolver.BSD_SOCKSTAT, Resolver.BSD_PROCSTAT, Resolver.LSOF]
+  elif system == 'OpenBSD':
+    resolvers = [Resolver.BSD_FSTAT]
+  elif system == 'Windows':
+    resolvers = [Resolver.NETSTAT_WINDOWS]
   else:
     # Sockstat isn't available by default on ubuntu.
 
@@ -491,9 +489,8 @@ def is_valid_ipv6_address(address, allow_brackets = False):
   elif not stem.util._is_str(address):
     return False
 
-  if allow_brackets:
-    if address.startswith('[') and address.endswith(']'):
-      address = address[1:-1]
+  if allow_brackets and address.startswith('[') and address.endswith(']'):
+    address = address[1:-1]
 
   if address.count('.') == 3:
     # Likely an ipv4-mapped portion. Check that its vaild, then replace with a
@@ -524,11 +521,8 @@ def is_valid_ipv6_address(address, allow_brackets = False):
   elif address.count('::') > 1 or ':::' in address:
     return False  # multiple groupings of zeros can't be collapsed
 
-  for entry in address.split(':'):
-    if not re.match('^[0-9a-fA-f]{0,4}$', entry):
-      return False
-
-  return True
+  return all(
+      re.match('^[0-9a-fA-f]{0,4}$', entry) for entry in address.split(':'))
 
 
 def is_valid_port(entry, allow_zero = False):
@@ -552,11 +546,7 @@ def is_valid_port(entry, allow_zero = False):
       return value > 0 and value < 65536
   except TypeError:
     if isinstance(entry, (tuple, list)):
-      for port in entry:
-        if not is_valid_port(port, allow_zero):
-          return False
-
-      return True
+      return all(is_valid_port(port, allow_zero) for port in entry)
     else:
       return False
   except ValueError:
@@ -748,12 +738,10 @@ def _get_masked_bits(mask):
 
   # converts octets to binary representation
   mask_bin = _address_to_binary(mask)
-  mask_match = re.match('^(1*)(0*)$', mask_bin)
-
-  if mask_match:
+  if mask_match := re.match('^(1*)(0*)$', mask_bin):
     return 32 - len(mask_match.groups()[1])
   else:
-    raise ValueError('Unable to convert mask to a bit count: %s' % mask)
+    raise ValueError(f'Unable to convert mask to a bit count: {mask}')
 
 
 def _get_binary(value, bits):

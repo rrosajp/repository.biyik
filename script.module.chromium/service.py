@@ -40,7 +40,7 @@ class ChromiumService(addon.blockingloop):
         self.image = None
 
     def log(self, txt):
-        addon.log("TINYXBMC:CHROMIUM SERVICE:%s" % txt)
+        addon.log(f"TINYXBMC:CHROMIUM SERVICE:{txt}")
 
     def checkimages(self):
         process = subprocess.Popen(["docker", "images"], stdout=subprocess.PIPE)
@@ -53,9 +53,9 @@ class ChromiumService(addon.blockingloop):
                 self.log("Detected faulty docker daemon")
             if not self.hasimage and re.search(self.image, line):
                 self.hasimage = True
-                self.log("Found ddocker image: %s" % self.image)
+                self.log(f"Found ddocker image: {self.image}")
         process.wait()
-        if not process.returncode == 0:
+        if process.returncode != 0:
             self.hasdaemon = False
 
     def pullimage(self):
@@ -71,8 +71,9 @@ class ChromiumService(addon.blockingloop):
                     continue
                 output += c
                 output = output[-50:]
-                m = re.findall("\:(.+?)([0-9\.]+)[A-Za-z]+\/([0-9\.]+)", output)
-                if m:
+                if m := re.findall(
+                    "\:(.+?)([0-9\.]+)[A-Za-z]+\/([0-9\.]+)", output
+                ):
                     if not progress:
                         progress = gui.bgprogress("Chromium")
                     desc = m[-1][0]
@@ -80,7 +81,7 @@ class ChromiumService(addon.blockingloop):
                     total = float(m[-1][2])
                     perc = int(100 * done / total)
                     if 0 <= perc <= 100:
-                        progress.update(perc, "%s:%s" % (desc, self.image))
+                        progress.update(perc, f"{desc}:{self.image}")
         if progress:
             progress.close()
 
@@ -98,8 +99,8 @@ class ChromiumService(addon.blockingloop):
         if abi.detect_os() == "linux":
             self.log("Current system is Linux")
             self.target = abi.getelfabi()[0][0]
-            self.image = "boogiepy/chromium-xvfb-%s" % self.target
-            self.log("Current image is %s" % self.image)
+            self.image = f"boogiepy/chromium-xvfb-{self.target}"
+            self.log(f"Current image is {self.image}")
             try:
                 process = subprocess.Popen(["docker", "--version"], stdout=subprocess.PIPE)
                 process.wait()
@@ -119,7 +120,7 @@ class ChromiumService(addon.blockingloop):
                     time.sleep(2)
                     self.checkimages()
                 if not self.hasimage:
-                    self.log("Pulling image %s" % self.image)
+                    self.log(f"Pulling image {self.image}")
                     self.pullimage()
                     self.checkimages()
         if not self.hasdaemon:
@@ -134,10 +135,27 @@ class ChromiumService(addon.blockingloop):
     def spawn(self):
         self.executecmd("docker rm chromium")
         self.log("Chromium Container Starting")
-        self.process = subprocess.Popen(["docker", "run", "-v", "%s:/addondir" % addondir, "--user", "%s:%s" % (os.getuid(), os.getgid()),
-                                         "--name=chromium", "--network=host", self.image,
-                                         "xvfb-chromium", "--disable-gpu", "--no-sandbox", "--remote-debugging-port=%d" % self.port,
-                                         "--disable-dev-shm-usage", "--user-data-dir=/addondir/data"], stdout=subprocess.PIPE)
+        self.process = subprocess.Popen(
+            [
+                "docker",
+                "run",
+                "-v",
+                f"{addondir}:/addondir",
+                "--user",
+                f"{os.getuid()}:{os.getgid()}",
+                "--name=chromium",
+                "--network=host",
+                self.image,
+                "xvfb-chromium",
+                "--disable-gpu",
+                "--no-sandbox",
+                "--remote-debugging-port=%d" % self.port,
+                "--disable-dev-shm-usage",
+                "--user-data-dir=/addondir/data",
+            ],
+            stdout=subprocess.PIPE,
+        )
+
         self.log("Chromium Container Started")
 
     def onclose(self):

@@ -26,8 +26,8 @@ class remote:
             while True:
                 elapsed = time.time() - state["start"]
                 if timeout is not None and elapsed > timeout or \
-                        progress.iscanceled() or \
-                        max_results is not None and len(state["results"]) >= max_results:
+                            progress.iscanceled() or \
+                            max_results is not None and len(state["results"]) >= max_results:
                     e.response.close()
                     state["stop"] = True
                     break
@@ -39,9 +39,11 @@ class remote:
                         if elapsed > loop_timeout:
                             percent = 100
                             e.response.close()
-                    progress.update(percent, "Found %s Results in %s queries. %s" % (len(state["results"]),
-                                                                                     state["queries"],
-                                                                                     "MAX RESULTS: " + str(max_results) if max_results else ""))
+                    progress.update(
+                        percent,
+                        f'Found {len(state["results"])} Results in {state["queries"]} queries. {f"MAX RESULTS: {str(max_results)}" if max_results else ""}',
+                    )
+
 
         threading.Thread(target=progress).start()
         while True:

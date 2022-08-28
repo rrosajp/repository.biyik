@@ -90,16 +90,13 @@ class Platform(Base):
         def check_kernel_config(output):
             for kernel_key in req_kernel_keys:
                 search = re.search(kernel_key + "\=(.)", output, re.IGNORECASE)
-                if not search or search.group(1).lower() not in ["m", "y"]:
+                if not search or search[1].lower() not in ["m", "y"]:
                     yield kernel_key
 
         def safeopen(path, gz=False):
             if os.path.exists(path):
                 try:
-                    if gz:
-                        f = gzip.open(path)
-                    else:
-                        f = open(path)
+                    f = gzip.open(path) if gz else open(path)
                     return f.read()
                 except Exception:
                     pass
@@ -110,17 +107,15 @@ class Platform(Base):
         if not modprobe.returncode:
             zcat = safeopen("/proc/config.gz", True)
             if zcat:
-                for msg in check_kernel_config(zcat):
-                    yield msg
+                yield from check_kernel_config(zcat)
                 raise StopIteration
         else:
             # debian way of kernel config
             uname = list(self.run_cmd("uname -r"))
             if len(uname):
-                config = safeopen("/boot/config-%s" % uname[0][:-1])
+                config = safeopen(f"/boot/config-{uname[0][:-1]}")
                 if config:
-                    for msg in check_kernel_config(config):
-                        yield msg
+                    yield from check_kernel_config(config)
                     raise StopIteration
         yield "Unknown kernel configuration"
 
@@ -138,8 +133,7 @@ class Platform(Base):
         popen.wait()
         if popen.returncode:
             if panic:
-                raise Exception("%s error code on running %s" % (popen.returncode, command))
-                return False
+                raise Exception(f"{popen.returncode} error code on running {command}")
             else:
                 return False
         else:
@@ -147,28 +141,35 @@ class Platform(Base):
 
     def default_if_gw(self):
         for line in self.run_cmd("ip route show"):
-            defroute = re.search("default via ([0-9\.]+) dev (.+?)\s", line)
-            if defroute:
-                return defroute.group(1), defroute.group(2)
+            if defroute := re.search("default via ([0-9\.]+) dev (.+?)\s", line):
+                return defroute[1], defroute[2]
         return "?", "?"
 
     def if_ip_subnet(self, dev):
         # TODO: IMPROVE: what happens if interface has multiple ips, which interface to route
         # tor from for direct connection?
-        for line in self.run_cmd("ip addr show %s" % dev):
-            subnet = re.search("inet\s([0-9\.\/]+)", line)
-            if subnet:
-                ip = subnet.group(1).split("/")
+        for line in self.run_cmd(f"ip addr show {dev}"):
+            if subnet := re.search("inet\s([0-9\.\/]+)", line):
+                ip = subnet[1].split("/")
                 if len(ip) == 2:
-                    return ip[0], subnet.group(1)
+                    return ip[0], subnet[1]
 
     def reset(self):
         list(self.run_cmd("iptables -w -F"))
         list(self.run_cmd("iptables -w -t nat -F"))
         list(self.run_cmd("iptables -w -t mangle -F"))
-        list(self.run_cmd("ip route flush table %s" % self.cfg["routing_policy_table_number"]))
-        list(self.run_cmd("ip rule del fwmark %s table %s" % (self.cfg["iptables_fwmark"],
-                                                              self.cfg["routing_policy_table_number"])))
+        list(
+            self.run_cmd(
+                f'ip route flush table {self.cfg["routing_policy_table_number"]}'
+            )
+        )
+
+        list(
+            self.run_cmd(
+                f'ip rule del fwmark {self.cfg["iptables_fwmark"]} table {self.cfg["routing_policy_table_number"]}'
+            )
+        )
+
         return True
 
     def start_ovpn(self):
@@ -180,8 +181,10 @@ class Platform(Base):
             f.write(self.cfg["openvpn_config"])
         with open(self.ovpncred, "w") as f:
             f.write("%s\n%s" % (self.cfg["openvpn_username"], self.cfg["openvpn_password"]))
-        lines = self.run_cmd('openvpn --config %s --auth-user-pass %s --route-noexec' % (self.ovpncfg,
-                                                                                         self.ovpncred))
+        lines = self.run_cmd(
+            f'openvpn --config {self.ovpncfg} --auth-user-pass {self.ovpncred} --route-noexec'
+        )
+
         for line in lines:
             remote = re.search("link\sremote.+?\[(.+)\]([0-9\.]+)\:([0-9]+)", line)
             # TODO: IMPROVE: It is possible to have ovpn tunnel to push multiple tunnels?
@@ -191,19 +194,19 @@ class Platform(Base):
             device = re.search("ip\saddr\sadd\sdev\s(.+)\slocal\s([0-9\.]+)\speer\s([0-9\.]+)", line)
             device2 = re.search("ip\saddr\sadd\sdev\s(.+)\s([0-9\.]+)\/", line)
             if remote:
-                self.tunnel_type = remote.group(1)
-                self.tunnel_remote_address = remote.group(2)
-                self.tunnel_remote_port = remote.group(3)
+                self.tunnel_type = remote[1]
+                self.tunnel_remote_address = remote[2]
+                self.tunnel_remote_port = remote[3]
             if device:
-                self.tunnel_device = device.group(1)
-                self.tunnel_local = device.group(2)
-                self.tunnel_peer = device.group(3)
+                self.tunnel_device = device[1]
+                self.tunnel_local = device[2]
+                self.tunnel_peer = device[3]
             elif device2 and tunnel_route_gw:
-                self.tunnel_device = device2.group(1)
-                self.tunnel_local = device2.group(2)
+                self.tunnel_device = device2[1]
+                self.tunnel_local = device2[2]
                 self.tunnel_peer = tunnel_route_gw.group(1)
             if self.tunnel_type and self.tunnel_remote_address and \
-                self.tunnel_remote_port and self.tunnel_local and self.tunnel_peer and self.tunnel_device:
+                    self.tunnel_remote_port and self.tunnel_local and self.tunnel_peer and self.tunnel_device:
                 return True
                 # TODO: IMPROVE: implement timeout in case openvpn does not start up for some reason
 
@@ -266,53 +269,75 @@ class Platform(Base):
         # Allow TOR instance direct communication
         rulenum = 1
         # TODO: IMPROVE: allow openvpn also to pass thorugh tor tcp forwarding
-        self.run_sec("iptables -w -t nat -I OUTPUT %s -m owner --uid-owner %s -j RETURN" % (rulenum,
-                                                                                            tor_uid[0]))
+        self.run_sec(
+            f"iptables -w -t nat -I OUTPUT {rulenum} -m owner --uid-owner {tor_uid[0]} -j RETURN"
+        )
+
         rulenum += 1
         # redirect dns requests to tor dns port
-        self.run_sec("iptables -w -t nat -I OUTPUT %s -d 127.0.0.1/32 -p udp -m udp --dport 53 -j REDIRECT --to-ports %s" % (rulenum,
-                                                                                                                             self.cfg["tor_dns_port"]))
+        self.run_sec(
+            f'iptables -w -t nat -I OUTPUT {rulenum} -d 127.0.0.1/32 -p udp -m udp --dport 53 -j REDIRECT --to-ports {self.cfg["tor_dns_port"]}'
+        )
 
-        # return all IANA specified local adresses from nat table 
+
+        # return all IANA specified local adresses from nat table
         for nontor in self.nontors:
             rulenum += 1
-            self.run_sec("iptables -w -t nat -I OUTPUT %s -d %s -j RETURN" % (rulenum, nontor))
+            self.run_sec(f"iptables -w -t nat -I OUTPUT {rulenum} -d {nontor} -j RETURN")
 
         # redirect all left tcp requests to tor
         rulenum += 1
-        self.run_sec("iptables -w -t nat -I OUTPUT %s -p tcp --syn -j REDIRECT --to-ports %s" %
-                     (rulenum, self.cfg["tor_tcp_port"]))
+        self.run_sec(
+            f'iptables -w -t nat -I OUTPUT {rulenum} -p tcp --syn -j REDIRECT --to-ports {self.cfg["tor_tcp_port"]}'
+        )
+
         # fix source address of the policy routed udp packets
-        self.run_sec("iptables -w -t nat -A POSTROUTING -p udp -o %s -j SNAT --to-source=%s" %
-                     (self.tunnel_device, self.tunnel_local))
+        self.run_sec(
+            f"iptables -w -t nat -A POSTROUTING -p udp -o {self.tunnel_device} -j SNAT --to-source={self.tunnel_local}"
+        )
+
 
         # mangle table
         # return all IANA specified local adresses from mangle table
         rulenum = 0
         for nontor in self.nontors:
             rulenum += 1
-            self.run_sec("iptables -w -t mangle -I OUTPUT %s -d %s -j RETURN" % (rulenum, nontor))
+            self.run_sec(
+                f"iptables -w -t mangle -I OUTPUT {rulenum} -d {nontor} -j RETURN"
+            )
+
         # mark rest of the udp packets
         rulenum += 1
-        self.run_sec("iptables -w -t mangle -I OUTPUT %s -m udp -p udp -j MARK --set-mark %s" %
-                     (rulenum, self.cfg["iptables_fwmark"]))
+        self.run_sec(
+            f'iptables -w -t mangle -I OUTPUT {rulenum} -m udp -p udp -j MARK --set-mark {self.cfg["iptables_fwmark"]}'
+        )
+
 
         # policy route the marked packets to VPN
-        self.run_sec("ip rule add fwmark %s table %s" % (self.cfg["iptables_fwmark"],
-                                                         self.cfg["routing_policy_table_number"]))
+        self.run_sec(
+            f'ip rule add fwmark {self.cfg["iptables_fwmark"]} table {self.cfg["routing_policy_table_number"]}'
+        )
 
-        self.run_sec("ip route add %s/32 via %s table %s" %
-                     (self.tunnel_remote_address, self.defaultgw,
-                      self.cfg["routing_policy_table_number"]))
-        self.run_sec("ip route add 0.0.0.0/1 via %s table %s" %
-                     (self.tunnel_peer, self.cfg["routing_policy_table_number"]))
-        self.run_sec("ip route add 128.0.0.0/1 via %s table %s" %
-                     (self.tunnel_peer, self.cfg["routing_policy_table_number"]))
+
+        self.run_sec(
+            f'ip route add {self.tunnel_remote_address}/32 via {self.defaultgw} table {self.cfg["routing_policy_table_number"]}'
+        )
+
+        self.run_sec(
+            f'ip route add 0.0.0.0/1 via {self.tunnel_peer} table {self.cfg["routing_policy_table_number"]}'
+        )
+
+        self.run_sec(
+            f'ip route add 128.0.0.0/1 via {self.tunnel_peer} table {self.cfg["routing_policy_table_number"]}'
+        )
+
         for route in self.tunnel_route:
             if "/" not in route:
-                route = "%s/32" % route
-            self.run_sec("ip route add %s via %s table %s" %
-                         (route, self.tunnel_peer, self.cfg["routing_policy_table_number"]))
+                route = f"{route}/32"
+            self.run_sec(
+                f'ip route add {route} via {self.tunnel_peer} table {self.cfg["routing_policy_table_number"]}'
+            )
+
         return True
 
     def stop_tor(self):
@@ -334,17 +359,16 @@ class Platform(Base):
     def set_dns(self, *dnss):
         if self.sudopw:
             return True
-        else:
-            with open("/etc/resolv.conf", "w") as f:
-                for dns in dnss:
-                    f.write("nameserver %s\n" % dns)
-                    return True
+        with open("/etc/resolv.conf", "w") as f:
+            for dns in dnss:
+                f.write("nameserver %s\n" % dns)
+                return True
 
     def findpids(self, process):
         for line in self.run_cmd("ps -A"):
             search = re.search("([0-9]+)\s.*?(.)" + process + "(.?)", line)
-            if search and not search.group(2) == "[" and not search.group(3) == "]":
-                yield int(search.group(1))
+            if search and search[2] != "[" and search[3] != "]":
+                yield int(search[1])
 
     def stats(self):
         stats = {}
@@ -355,11 +379,11 @@ class Platform(Base):
                             self.getsetting("tor_tcp_port"), line)
             udp = re.search("([0-9\K\G\M\T]+)\s.*?udp.*?to\:[0-9\.]+", line)
             if dns:
-                stats["dns_packets_routed_to_tor"] = dns.group(1)
+                stats["dns_packets_routed_to_tor"] = dns[1]
             if tcp:
-                stats["tcp_packets_routed_to_tor"] = tcp.group(1)
+                stats["tcp_packets_routed_to_tor"] = tcp[1]
             if udp:
-                stats["udp_packets_routed_to_vpn"] = udp.group(1)
+                stats["udp_packets_routed_to_vpn"] = udp[1]
         """
         for line in self.run_cmd("iptables -w -L -v -n -t mangle"):
             udp = re.search("([0-9\K\G\M\T]+)\s.*?udp\sMARK\sset\s" +
@@ -370,10 +394,13 @@ class Platform(Base):
         utppackets = []
         for line in self.run_cmd("iptables -w -L -v -n"):
             for mark in ["0x100", "0x1100", "0x2100", "0x3100", "0x4100"]:
-                utp = re.search("([0-9\K\G\M\T]+)\s.*?udp\su32\s\"0x1a\&0xffff\=" +
-                                mark + "\"\sreject\-with\sicmp\-port\-unreachable", line)
-                if utp:
-                    utppackets.append(utp.group(1))
+                if utp := re.search(
+                    "([0-9\K\G\M\T]+)\s.*?udp\su32\s\"0x1a\&0xffff\="
+                    + mark
+                    + "\"\sreject\-with\sicmp\-port\-unreachable",
+                    line,
+                ):
+                    utppackets.append(utp[1])
         if len(utppackets):
             stats["blocked_utp_packets"] = ", ".join(utppackets)
         return stats

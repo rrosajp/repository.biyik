@@ -49,15 +49,11 @@ def parse(argv):
       error_msg = "aren't recognized arguments" if len(unrecognized_args) > 1 else "isn't a recognized argument"
       raise getopt.GetoptError("'%s' %s" % ("', '".join(unrecognized_args), error_msg))
   except Exception as exc:
-    raise ValueError('%s (for usage provide --help)' % exc)
+    raise ValueError(f'{exc} (for usage provide --help)')
 
   for opt, arg in recognized_args:
     if opt in ('-i', '--interface'):
-      if ':' in arg:
-        address, port = arg.rsplit(':', 1)
-      else:
-        address, port = None, arg
-
+      address, port = arg.rsplit(':', 1) if ':' in arg else (None, arg)
       if address is not None:
         if not stem.util.connection.is_valid_ipv4_address(address):
           raise ValueError("'%s' isn't a valid IPv4 address" % address)

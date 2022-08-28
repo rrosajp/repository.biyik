@@ -294,7 +294,7 @@ class DaemonTask(object):
     elif self.status == State.FAILED:
       raise self.error
     else:
-      raise RuntimeError('BUG: unexpected status from daemon task, %s' % self.status)
+      raise RuntimeError(f'BUG: unexpected status from daemon task, {self.status}')
 
   @staticmethod
   def _run_wrapper(conn, priority, runner, args):
@@ -446,23 +446,14 @@ def is_running(command):
       primary_resolver = IS_RUNNING_PS_LINUX
       secondary_resolver = IS_RUNNING_PS_BSD
 
-    command_listing = call(primary_resolver, None)
-
-    if not command_listing:
-      command_listing = call(secondary_resolver, None)
-
-    if command_listing:
+    if command_listing := call(primary_resolver, None) or call(
+        secondary_resolver, None):
       command_listing = [c.strip() for c in command_listing]
 
       if stem.util._is_str(command):
         command = [command]
 
-      for cmd in command:
-        if cmd in command_listing:
-          return True
-
-      return False
-
+      return any(cmd in command_listing for cmd in command)
   return None
 
 
@@ -585,9 +576,7 @@ def pid_by_name(process_name, multiple = False):
   #   3392
 
   if is_available('pgrep'):
-    results = call(GET_PID_BY_NAME_PGREP % process_name, None)
-
-    if results:
+    if results := call(GET_PID_BY_NAME_PGREP % process_name, None):
       try:
         pids = list(map(int, results))
 
@@ -637,10 +626,7 @@ def pid_by_name(process_name, multiple = False):
 
   if is_available('ps'):
     if not is_bsd():
-      # linux variant of ps
-      results = call(GET_PID_BY_NAME_PS_LINUX % process_name, None)
-
-      if results:
+      if results := call(GET_PID_BY_NAME_PS_LINUX % process_name, None):
         try:
           pids = list(map(int, results[1:]))
 
@@ -652,12 +638,9 @@ def pid_by_name(process_name, multiple = False):
           pass
 
     if is_bsd():
-      # bsd variant of ps
-      results = call(GET_PID_BY_NAME_PS_BSD, None)
-
-      if results:
+      if results := call(GET_PID_BY_NAME_PS_BSD, None):
         # filters results to those with our process name
-        results = [r.split()[0] for r in results if r.endswith(' %s' % process_name)]
+        results = [r.split()[0] for r in results if r.endswith(f' {process_name}')]
 
         try:
           pids = list(map(int, results))
@@ -684,9 +667,7 @@ def pid_by_name(process_name, multiple = False):
   #   2561
 
   if is_available('lsof'):
-    results = call(GET_PID_BY_NAME_LSOF % process_name, None)
-
-    if results:
+    if results := call(GET_PID_BY_NAME_LSOF % process_name, None):
       try:
         pids = list(map(int, results))
 
@@ -699,20 +680,16 @@ def pid_by_name(process_name, multiple = False):
 
   if is_available('tasklist') and is_windows():
     if not process_name.endswith('.exe'):
-      process_name = process_name + '.exe'
+      process_name = f'{process_name}.exe'
 
-    process_ids = []
-
-    results = stem.util.system.call('tasklist', None)
-
-    if results:
+    if results := stem.util.system.call('tasklist', None):
       tasklist_regex = re.compile('^\\s*%s\\s+(?P<pid>[0-9]*)' % process_name)
 
-      for line in results:
-        match = tasklist_regex.search(line)
+      process_ids = []
 
-        if match:
-          process_ids.append(int(match.group('pid')))
+      for line in results:
+        if match := tasklist_regex.search(line):
+          process_ids.append(int(match['pid']))
 
       if multiple:
         return process_ids
@@ -763,11 +740,9 @@ def pid_by_port(port):
   #   udp6       0      0 fe80::7ae4:ff:fe2f::123 :::*                       -
 
   if is_available('netstat'):
-    results = call(GET_PID_BY_PORT_NETSTAT, None)
-
-    if results:
+    if results := call(GET_PID_BY_PORT_NETSTAT, None):
       # filters to results with our port
-      results = [r for r in results if '127.0.0.1:%s' % port in r]
+      results = [r for r in results if f'127.0.0.1:{port}' in r]
 
       if len(results) == 1 and len(results[0].split()) == 7:
         results = results[0].split()[6]  # process field (ex. "7184/tor")
@@ -796,11 +771,12 @@ def pid_by_port(port):
   #   _tor     tor        4397  20 tcp4   51.64.7.84:51946   32.83.7.104:443
 
   if is_available('sockstat'):
-    results = call(GET_PID_BY_PORT_SOCKSTAT % port, None)
-
-    if results:
+    if results := call(GET_PID_BY_PORT_SOCKSTAT % port, None):
       # filters to results where this is the local port
-      results = [r for r in results if (len(r.split()) == 7 and (':%s' % port) in r.split()[5])]
+      results = [
+          r for r in results
+          if len(r.split()) == 7 and f':{port}' in r.split()[5]
+      ]
 
       if len(results) == 1:
         pid = results[0].split()[2]
@@ -828,11 +804,12 @@ def pid_by_port(port):
   #   tor     1745 atagar    6u  IPv4  14229      0t0  TCP 127.0.0.1:9051 (LISTEN)
 
   if is_available('lsof'):
-    results = call(GET_PID_BY_PORT_LSOF, None)
-
-    if results:
+    if results := call(GET_PID_BY_PORT_LSOF, None):
       # filters to results with our port
-      results = [r for r in results if (len(r.split()) == 10 and (':%s' % port) in r.split()[8])]
+      results = [
+          r for r in results
+          if len(r.split()) == 10 and f':{port}' in r.split()[8]
+      ]
 
       if len(results) == 1:
         pid = results[0].split()[1]
@@ -931,7 +908,7 @@ def cwd(pid):
       pass
 
   # Fall back to a pwdx query. This isn't available on BSD.
-  logging_prefix = 'cwd(%s):' % pid
+  logging_prefix = f'cwd({pid}):'
 
   if is_available('pwdx'):
     # pwdx results are of the form:
@@ -943,9 +920,10 @@ def cwd(pid):
     if not results:
       log.debug("%s pwdx didn't return any results" % logging_prefix)
     elif results[0].endswith('No such process'):
-      log.debug('%s pwdx processes reported for this pid' % logging_prefix)
-    elif len(results) != 1 or results[0].count(' ') != 1 or not results[0].startswith('%s: ' % pid):
-      log.debug('%s we got unexpected output from pwdx: %s' % (logging_prefix, results))
+      log.debug(f'{logging_prefix} pwdx processes reported for this pid')
+    elif (len(results) != 1 or results[0].count(' ') != 1
+          or not results[0].startswith(f'{pid}: ')):
+      log.debug(f'{logging_prefix} we got unexpected output from pwdx: {results}')
     else:
       return results[0].split(' ', 1)[1].strip()
 
@@ -977,7 +955,7 @@ def cwd(pid):
       if ' ' not in lsof_result:
         return lsof_result
     else:
-      log.debug('%s we got unexpected output from lsof: %s' % (logging_prefix, results))
+      log.debug(f'{logging_prefix} we got unexpected output from lsof: {results}')
 
   return None  # all queries failed
 
@@ -1007,7 +985,7 @@ def user(pid):
       pass
 
   if is_available('ps'):
-    results = call('ps -o user %s' % pid, [])
+    results = call(f'ps -o user {pid}', [])
 
     if len(results) >= 2:
       return results[1].strip()
@@ -1035,7 +1013,7 @@ def start_time(pid):
       pass
 
   try:
-    ps_results = call('ps -p %s -o etime' % pid, [])
+    ps_results = call(f'ps -p {pid} -o etime', [])
 
     if len(ps_results) >= 2:
       etime = ps_results[1].strip()
@@ -1065,9 +1043,7 @@ def tail(target, lines = None):
 
   if isinstance(target, str):
     with open(target, 'rb') as target_file:
-      for line in tail(target_file, lines):
-        yield line
-
+      yield from tail(target_file, lines)
       return
 
   # based on snippet from...
@@ -1127,9 +1103,9 @@ def bsd_jail_id(pid):
 
   os_name = platform.system()
   if os_name == 'FreeBSD':
-    log.warn('Unable to get the jail id for process %s.' % pid)
+    log.warn(f'Unable to get the jail id for process {pid}.')
   else:
-    log.debug('bsd_jail_id(%s): jail ids do not exist on %s' % (pid, os_name))
+    log.debug(f'bsd_jail_id({pid}): jail ids do not exist on {os_name}')
 
   return 0
 
@@ -1314,7 +1290,7 @@ def call(command, default = UNDEFINED, ignore_exit_status = False, timeout = Non
     log.debug('System call: %s (runtime: %0.2f)' % (command, runtime))
 
     if log.is_tracing():
-      trace_prefix = 'Received from system (%s)' % command
+      trace_prefix = f'Received from system ({command})'
 
       if stdout and stderr:
         log.trace(trace_prefix + ', stdout:\n%s\nstderr:\n%s' % (stdout, stderr))
@@ -1328,10 +1304,7 @@ def call(command, default = UNDEFINED, ignore_exit_status = False, timeout = Non
     if not ignore_exit_status and exit_status != 0:
       raise OSError('%s returned exit status %i' % (command, exit_status))
 
-    if stdout:
-      return stdout.decode('utf-8', 'replace').splitlines()
-    else:
-      return []
+    return stdout.decode('utf-8', 'replace').splitlines() if stdout else []
   except CallTimeoutError:
     log.debug('System call (timeout): %s (after %0.4fs)' % (command, timeout))
 
@@ -1340,7 +1313,7 @@ def call(command, default = UNDEFINED, ignore_exit_status = False, timeout = Non
     else:
       raise
   except OSError as exc:
-    log.debug('System call (failed): %s (error: %s)' % (command, exc))
+    log.debug(f'System call (failed): {command} (error: {exc})')
 
     if default != UNDEFINED:
       return default

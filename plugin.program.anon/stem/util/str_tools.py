@@ -127,9 +127,9 @@ def _to_int(msg):
 
   if stem.prereq.is_python_3() and isinstance(msg, bytes):
     # iterating over bytes in python3 provides ints rather than characters
-    return sum([pow(256, (len(msg) - i - 1)) * c for (i, c) in enumerate(msg)])
+    return sum(pow(256, (len(msg) - i - 1)) * c for (i, c) in enumerate(msg))
   else:
-    return sum([pow(256, (len(msg) - i - 1)) * ord(c) for (i, c) in enumerate(msg)])
+    return sum(pow(256, (len(msg) - i - 1)) * ord(c) for (i, c) in enumerate(msg))
 
 
 def _to_camel_case(label, divider = '_', joiner = ' '):
@@ -283,7 +283,7 @@ def crop(msg, size, min_word_length = 4, min_crop = 0, ending = Ending.ELLIPSE, 
 
     if ending == Ending.HYPHEN:
       remainder = return_msg[-1] + remainder
-      return_msg = return_msg[:-1].rstrip() + '-'
+      return_msg = f'{return_msg[:-1].rstrip()}-'
   else:
     return_msg, remainder = msg[:last_wordbreak], msg[last_wordbreak:]
 
@@ -293,7 +293,7 @@ def crop(msg, size, min_word_length = 4, min_crop = 0, ending = Ending.ELLIPSE, 
     return_msg = return_msg[:-1]
 
   if ending == Ending.ELLIPSE:
-    return_msg = return_msg.rstrip() + '...'
+    return_msg = f'{return_msg.rstrip()}...'
 
   return (return_msg, remainder) if get_remainder else return_msg
 
@@ -478,7 +478,7 @@ def parse_short_time_label(label):
     time_sum += int(days) * 86400
     return time_sum
   except ValueError:
-    raise ValueError('Non-numeric value in time entry: %s' % label)
+    raise ValueError(f'Non-numeric value in time entry: {label}')
 
 
 def _parse_timestamp(entry):
@@ -497,12 +497,13 @@ def _parse_timestamp(entry):
   """
 
   if not stem.util._is_str(entry):
-    raise ValueError('parse_timestamp() input must be a str, got a %s' % type(entry))
+    raise ValueError(f'parse_timestamp() input must be a str, got a {type(entry)}')
 
   try:
     time = [int(x) for x in _timestamp_re.match(entry).groups()]
   except AttributeError:
-    raise ValueError('Expected timestamp in format YYYY-MM-DD HH:MM:ss but got ' + entry)
+    raise ValueError(
+        f'Expected timestamp in format YYYY-MM-DD HH:MM:ss but got {entry}')
 
   return datetime.datetime(time[0], time[1], time[2], time[3], time[4], time[5])
 
@@ -523,7 +524,8 @@ def _parse_iso_timestamp(entry):
   """
 
   if not stem.util._is_str(entry):
-    raise ValueError('parse_iso_timestamp() input must be a str, got a %s' % type(entry))
+    raise ValueError(
+        f'parse_iso_timestamp() input must be a str, got a {type(entry)}')
 
   # based after suggestions from...
   # http://stackoverflow.com/questions/127803/how-to-parse-iso-formatted-date-in-python
@@ -537,7 +539,7 @@ def _parse_iso_timestamp(entry):
     raise ValueError("timestamp's microseconds should be six digits")
 
   if len(timestamp_str) > 10 and timestamp_str[10] == 'T':
-    timestamp_str = timestamp_str[:10] + ' ' + timestamp_str[11:]
+    timestamp_str = f'{timestamp_str[:10]} {timestamp_str[11:]}'
   else:
     raise ValueError("timestamp didn't contain delimeter 'T' between date and time")
 
@@ -562,11 +564,11 @@ def _get_label(units, count, decimal, is_long, round = False):
   label_format = '%%.%if' % decimal
 
   if count < 0:
-    label_format = '-' + label_format
+    label_format = f'-{label_format}'
     count = abs(count)
   elif count == 0:
-    units_label = units[-1][2] + 's' if is_long else units[-1][1]
-    return '%s%s' % (label_format % count, units_label)
+    units_label = f'{units[-1][2]}s' if is_long else units[-1][1]
+    return f'{label_format % count}{units_label}'
 
   for count_per_unit, short_label, long_label in units:
     if count >= count_per_unit:
@@ -578,18 +580,14 @@ def _get_label(units, count, decimal, is_long, round = False):
 
       count_label = label_format % (count / count_per_unit)
 
-      if is_long:
+      if not is_long:
+        return count_label + short_label
         # Pluralize if any of the visible units make it greater than one. For
         # instance 1.0003 is plural but 1.000 isn't.
 
-        if decimal > 0:
-          is_plural = count > count_per_unit
-        else:
-          is_plural = count >= count_per_unit * 2
-
-        return count_label + long_label + ('s' if is_plural else '')
-      else:
-        return count_label + short_label
+      is_plural = (count > count_per_unit
+                   if decimal > 0 else count >= count_per_unit * 2)
+      return count_label + long_label + ('s' if is_plural else '')
 
 
 # TODO: drop with stem 2.x

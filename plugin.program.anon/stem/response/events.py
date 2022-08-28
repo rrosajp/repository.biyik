@@ -90,18 +90,9 @@ class Event(stem.response.ControlMessage):
 
     content = str(self)
 
-    while True:
-      match = QUOTED_KW_ARG.match(content)
-
-      if not match:
-        match = KW_ARG.match(content)
-
-      if match:
-        content, keyword, value = match.groups()
-        self.keyword_args[keyword] = value
-      else:
-        break
-
+    while match := QUOTED_KW_ARG.match(content) or KW_ARG.match(content):
+      content, keyword, value = match.groups()
+      self.keyword_args[keyword] = value
     # Setting attributes for the fields that we recognize.
 
     self.positional_args = content.split()[1:]
@@ -152,7 +143,7 @@ class Event(stem.response.ControlMessage):
     try:
       return str_tools._parse_iso_timestamp(timestamp)
     except ValueError as exc:
-      raise stem.ProtocolError('Unable to parse timestamp (%s): %s' % (exc, self))
+      raise stem.ProtocolError(f'Unable to parse timestamp ({exc}): {self}')
 
   # method overwritten by our subclasses for special handling that they do
   def _parse(self):
@@ -167,15 +158,13 @@ class Event(stem.response.ControlMessage):
     :param stem.util.enum.Enum enum: enumeration to check against
     """
 
-    attr_values = getattr(self, attr)
-
-    if attr_values:
+    if attr_values := getattr(self, attr):
       if stem.util._is_str(attr_values):
         attr_values = [attr_values]
 
       for value in attr_values:
         if value not in attr_enum:
-          log_id = 'event.%s.unknown_%s.%s' % (self.type.lower(), attr, value)
+          log_id = f'event.{self.type.lower()}.unknown_{attr}.{value}'
           unrecognized_msg = "%s event had an unrecognized %s (%s). Maybe a new addition to the control protocol? Full Event: '%s'" % (self.type, attr, value, self)
           log.log_once(log_id, log.INFO, unrecognized_msg)
 
@@ -220,7 +209,7 @@ class AddrMapEvent(Event):
         try:
           self.expiry = stem.util.str_tools._parse_timestamp(self.expiry)
         except ValueError:
-          raise stem.ProtocolError('Unable to parse date in ADDRMAP event: %s' % self)
+          raise stem.ProtocolError(f'Unable to parse date in ADDRMAP event: {self}')
 
     if self.utc_expiry is not None:
       self.utc_expiry = stem.util.str_tools._parse_timestamp(self.utc_expiry)
@@ -336,7 +325,8 @@ class BuildTimeoutSetEvent(Event):
         try:
           setattr(self, param, int(param_value))
         except ValueError:
-          raise stem.ProtocolError('The %s of a BUILDTIMEOUT_SET should be an integer: %s' % (param, self))
+          raise stem.ProtocolError(
+              f'The {param} of a BUILDTIMEOUT_SET should be an integer: {self}')
 
     for param in ('alpha', 'quantile', 'timeout_rate', 'close_rate'):
       param_value = getattr(self, param)
@@ -345,7 +335,8 @@ class BuildTimeoutSetEvent(Event):
         try:
           setattr(self, param, float(param_value))
         except ValueError:
-          raise stem.ProtocolError('The %s of a BUILDTIMEOUT_SET should be a float: %s' % (param, self))
+          raise stem.ProtocolError(
+              f'The {param} of a BUILDTIMEOUT_SET should be a float: {self}')
 
     self._log_if_unrecognized('set_type', stem.TimeoutSetType)
 
@@ -515,7 +506,7 @@ class ClientsSeenEvent(Event):
         if len(locale) != 2:
           raise stem.ProtocolError("Locales should be a two character code, got '%s': %s" % (locale, self))
         elif not count.isdigit():
-          raise stem.ProtocolError('Locale count was non-numeric (%s): %s' % (count, self))
+          raise stem.ProtocolError(f'Locale count was non-numeric ({count}): {self}')
         elif locale in locale_to_count:
           raise stem.ProtocolError("CountrySummary had multiple mappings for '%s': %s" % (locale, self))
 
@@ -533,7 +524,8 @@ class ClientsSeenEvent(Event):
         protocol, count = entry.split('=', 1)
 
         if not count.isdigit():
-          raise stem.ProtocolError('IP protocol count was non-numeric (%s): %s' % (count, self))
+          raise stem.ProtocolError(
+              f'IP protocol count was non-numeric ({count}): {self}')
 
         protocol_to_count[protocol] = int(count)
 
@@ -626,7 +618,7 @@ class GuardEvent(Event):
 
     try:
       self.endpoint_fingerprint, self.endpoint_nickname = \
-        stem.control._parse_circ_entry(self.endpoint)
+          stem.control._parse_circ_entry(self.endpoint)
     except stem.ProtocolError:
       raise stem.ProtocolError("GUARD's endpoint doesn't match a ServerSpec: %s" % self)
 
@@ -674,13 +666,15 @@ class HSDescEvent(Event):
     if self.directory != 'UNKNOWN':
       try:
         self.directory_fingerprint, self.directory_nickname = \
-          stem.control._parse_circ_entry(self.directory)
+            stem.control._parse_circ_entry(self.directory)
       except stem.ProtocolError:
         raise stem.ProtocolError("HS_DESC's directory doesn't match a ServerSpec: %s" % self)
 
     if self.replica is not None:
       if not self.replica.isdigit():
-        raise stem.ProtocolError('HS_DESC event got a non-numeric replica count (%s): %s' % (self.replica, self))
+        raise stem.ProtocolError(
+            f'HS_DESC event got a non-numeric replica count ({self.replica}): {self}'
+        )
 
       self.replica = int(self.replica)
 
@@ -716,7 +710,7 @@ class HSDescContentEvent(Event):
 
     try:
       self.directory_fingerprint, self.directory_nickname = \
-        stem.control._parse_circ_entry(self.directory)
+          stem.control._parse_circ_entry(self.directory)
     except stem.ProtocolError:
       raise stem.ProtocolError("HS_DESC_CONTENT's directory doesn't match a ServerSpec: %s" % self)
 
@@ -855,7 +849,8 @@ class NewDescEvent(Event):
   """
 
   def _parse(self):
-    self.relays = tuple([stem.control._parse_circ_entry(entry) for entry in str(self).split()[1:]])
+    self.relays = tuple(
+        stem.control._parse_circ_entry(entry) for entry in str(self).split()[1:])
 
 
 class ORConnEvent(Event):
@@ -903,7 +898,7 @@ class ORConnEvent(Event):
 
     try:
       self.endpoint_fingerprint, self.endpoint_nickname = \
-        stem.control._parse_circ_entry(self.endpoint)
+          stem.control._parse_circ_entry(self.endpoint)
     except stem.ProtocolError:
       if ':' not in self.endpoint:
         raise stem.ProtocolError("ORCONN endpoint is neither a relay nor 'address:port': %s" % self)
@@ -918,7 +913,9 @@ class ORConnEvent(Event):
 
     if self.circ_count is not None:
       if not self.circ_count.isdigit():
-        raise stem.ProtocolError('ORCONN event got a non-numeric circuit count (%s): %s' % (self.circ_count, self))
+        raise stem.ProtocolError(
+            f'ORCONN event got a non-numeric circuit count ({self.circ_count}): {self}'
+        )
 
       self.circ_count = int(self.circ_count)
 
@@ -1036,17 +1033,16 @@ class StreamEvent(Event):
   def _parse(self):
     if self.target is None:
       raise stem.ProtocolError("STREAM event didn't have a target: %s" % self)
-    else:
-      if ':' not in self.target:
-        raise stem.ProtocolError("Target location must be of the form 'address:port': %s" % self)
+    if ':' not in self.target:
+      raise stem.ProtocolError("Target location must be of the form 'address:port': %s" % self)
 
-      address, port = self.target.rsplit(':', 1)
+    address, port = self.target.rsplit(':', 1)
 
-      if not connection.is_valid_port(port, allow_zero = True):
-        raise stem.ProtocolError("Target location's port is invalid: %s" % self)
+    if not connection.is_valid_port(port, allow_zero = True):
+      raise stem.ProtocolError("Target location's port is invalid: %s" % self)
 
-      self.target_address = address
-      self.target_port = int(port)
+    self.target_address = address
+    self.target_port = int(port)
 
     if self.source_addr is None:
       self.source_address = None
@@ -1130,11 +1126,11 @@ class TransportLaunchedEvent(Event):
       raise stem.ProtocolError("Transport type should either be 'server' or 'client': %s" % self)
 
     if not connection.is_valid_ipv4_address(self.address) and \
-       not connection.is_valid_ipv6_address(self.address):
+         not connection.is_valid_ipv6_address(self.address):
       raise stem.ProtocolError("Transport address isn't a valid IPv4 or IPv6 address: %s" % self)
 
     if not connection.is_valid_port(self.port):
-      raise stem.ProtocolError('Transport port is invalid: %s' % self)
+      raise stem.ProtocolError(f'Transport port is invalid: {self}')
 
     self.port = int(self.port)
 
@@ -1251,9 +1247,7 @@ class CircuitBandwidthEvent(Event):
     self.time = self._iso_timestamp(self.time)
 
     for attr in ('read', 'written', 'delivered_read', 'delivered_written', 'overhead_read', 'overhead_written'):
-      value = getattr(self, attr)
-
-      if value:
+      if value := getattr(self, attr):
         setattr(self, attr, INT_TYPE(value))
 
 

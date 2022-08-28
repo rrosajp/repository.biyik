@@ -123,10 +123,15 @@ def get_config_policy(rules, ip_address = None):
   :raises: **ValueError** if input isn't a valid tor exit policy
   """
 
-  if ip_address and not (stem.util.connection.is_valid_ipv4_address(ip_address) or stem.util.connection.is_valid_ipv6_address(ip_address, allow_brackets = True)):
-    raise ValueError("%s isn't a valid IP address" % ip_address)
-  elif ip_address and stem.util.connection.is_valid_ipv6_address(ip_address, allow_brackets = True) and not (ip_address[0] == '[' and ip_address[-1] == ']'):
-    ip_address = '[%s]' % ip_address  # ExitPolicy validation expects IPv6 addresses to be bracketed
+  if ip_address:
+    if not stem.util.connection.is_valid_ipv4_address(
+        ip_address) and not stem.util.connection.is_valid_ipv6_address(
+            ip_address, allow_brackets=True):
+      raise ValueError("%s isn't a valid IP address" % ip_address)
+    elif stem.util.connection.is_valid_ipv6_address(
+          ip_address, allow_brackets=True) and (ip_address[0] != '['
+                                                or ip_address[-1] != ']'):
+      ip_address = f'[{ip_address}]'
 
   if stem.util._is_str(rules):
     rules = rules.split(',')
@@ -140,7 +145,7 @@ def get_config_policy(rules, ip_address = None):
       continue
 
     if not re.search(':[\\d\\-\\*]+$', rule):
-      rule = '%s:*' % rule
+      rule = f'{rule}:*'
 
     if 'private' in rule:
       acceptance = rule.split(' ', 1)[0]
@@ -155,8 +160,9 @@ def get_config_policy(rules, ip_address = None):
         except:
           pass  # we might not have a network connection
 
-      for private_addr in addresses:
-        result.append(ExitPolicyRule('%s %s:%s' % (acceptance, private_addr, port)))
+      result.extend(
+          ExitPolicyRule(f'{acceptance} {private_addr}:{port}')
+          for private_addr in addresses)
     else:
       result.append(ExitPolicyRule(rule))
 
@@ -176,7 +182,7 @@ def _flag_private_rules(rules):
     if i + len(PRIVATE_ADDRESSES) > len(rules):
       break
 
-    rule_str = '%s/%s' % (rule.address, rule.get_masked_bits())
+    rule_str = f'{rule.address}/{rule.get_masked_bits()}'
 
     if rule_str == PRIVATE_ADDRESSES[0]:
       matches.append(i)
@@ -201,7 +207,7 @@ def _flag_private_rules(rules):
     is_accept = rule_set[0].is_accept
 
     for i, rule in enumerate(rule_set):
-      rule_str = '%s/%s' % (rule.address, rule.get_masked_bits())
+      rule_str = f'{rule.address}/{rule.get_masked_bits()}'
 
       if rule_str != PRIVATE_ADDRESSES[i] or rule.min_port != min_port or rule.max_port != max_port or rule.is_accept != is_accept:
         is_match = False
@@ -243,7 +249,9 @@ class ExitPolicy(object):
 
     for rule in rules:
       if not stem.util._is_str(rule) and not isinstance(rule, ExitPolicyRule):
-        raise TypeError('Exit policy rules can only contain strings or ExitPolicyRules, got a %s (%s)' % (type(rule), rules))
+        raise TypeError(
+            f'Exit policy rules can only contain strings or ExitPolicyRules, got a {type(rule)} ({rules})'
+        )
 
     # Unparsed representation of the rules we were constructed with. Our
     # _get_rules() method consumes this to provide ExitPolicyRule instances.
@@ -286,14 +294,11 @@ class ExitPolicy(object):
     :returns: **True** if exiting to this destination is allowed, **False** otherwise
     """
 
-    if not self.is_exiting_allowed():
-      return False
-
-    for rule in self._get_rules():
-      if rule.is_match(address, port, strict):
-        return rule.is_accept
-
-    return self._is_allowed_default
+    return (next(
+        (rule.is_accept
+         for rule in self._get_rules() if rule.is_match(address, port, strict)),
+        self._is_allowed_default,
+    ) if self.is_exiting_allowed() else False)
 
   @lru_cache()
   def is_exiting_allowed(self):
@@ -338,14 +343,11 @@ class ExitPolicy(object):
     :returns: **str** with a concise summary for our policy
     """
 
-    # determines if we're a white-list or blacklist
-    is_whitelist = not self._is_allowed_default
-
-    for rule in self._get_rules():
-      if rule.is_address_wildcard() and rule.is_port_wildcard():
-        is_whitelist = not rule.is_accept
-        break
-
+    is_whitelist = next(
+        (not rule.is_accept for rule in self._get_rules()
+         if rule.is_address_wildcard() and rule.is_port_wildcard()),
+        not self._is_allowed_default,
+    )
     # Iterates over the policies and adds the the ports we'll return (ie,
     # allows if a white-list and rejects if a blacklist). Regardless of a
     # port's allow/reject policy, all further entries with that port are
@@ -408,11 +410,7 @@ class ExitPolicy(object):
       keyword, **False** otherwise
     """
 
-    for rule in self._get_rules():
-      if rule.is_private():
-        return True
-
-    return False
+    return any(rule.is_private() for rule in self._get_rules())
 
   def strip_private(self):
     """
@@ -434,11 +432,7 @@ class ExitPolicy(object):
     :returns: **True** if we have the default policy suffix, **False** otherwise
     """
 
-    for rule in self._get_rules():
-      if rule.is_default():
-        return True
-
-    return False
+    return any(rule.is_default() for rule in self._get_rules())
 
   def strip_default(self):
     """
@@ -517,8 +511,7 @@ class ExitPolicy(object):
     return len(self._get_rules())
 
   def __iter__(self):
-    for rule in self._get_rules():
-      yield rule
+    yield from self._get_rules()
 
   @lru_cache()
   def __str__(self):
@@ -591,7 +584,9 @@ class MicroExitPolicy(ExitPolicy):
     policy = policy[6:]
 
     if not policy.startswith(' '):
-      raise ValueError('A microdescriptor exit policy should have a space separating accept/reject from its port list: %s' % self._policy)
+      raise ValueError(
+          f'A microdescriptor exit policy should have a space separating accept/reject from its port list: {self._policy}'
+      )
 
     policy = policy.lstrip()
 
@@ -605,7 +600,7 @@ class MicroExitPolicy(ExitPolicy):
         min_port = max_port = port_entry
 
       if not stem.util.connection.is_valid_port(min_port) or \
-         not stem.util.connection.is_valid_port(max_port):
+           not stem.util.connection.is_valid_port(max_port):
         raise ValueError("'%s' is an invalid port range" % port_entry)
 
       rules.append(MicroExitPolicyRule(self.is_accept, int(min_port), int(max_port)))
@@ -673,7 +668,9 @@ class ExitPolicyRule(object):
       raise ValueError("An exit policy must start with either 'accept[6]' or 'reject[6]': %s" % rule)
 
     if not exitpattern.startswith(' '):
-      raise ValueError('An exit policy should have a space separating its accept/reject from the exit pattern: %s' % rule)
+      raise ValueError(
+          f'An exit policy should have a space separating its accept/reject from the exit pattern: {rule}'
+      )
 
     exitpattern = exitpattern.lstrip()
 
@@ -797,10 +794,7 @@ class ExitPolicyRule(object):
       elif port < self.min_port or port > self.max_port:
         return False
 
-    if fuzzy_match:
-      return strict != self.is_accept
-    else:
-      return True
+    return strict != self.is_accept if fuzzy_match else True
 
   def get_address_type(self):
     """
@@ -893,7 +887,7 @@ class ExitPolicyRule(object):
       if address_type == AddressType.IPv4:
         label += self.address
       else:
-        label += '[%s]' % self.address
+        label += f'[{self.address}]'
 
       # Including our mask label as follows...
       # - exclude our mask if it doesn't do anything
@@ -901,12 +895,12 @@ class ExitPolicyRule(object):
       # - use the mask itself otherwise
 
       if (address_type == AddressType.IPv4 and self._masked_bits == 32) or \
-         (address_type == AddressType.IPv6 and self._masked_bits == 128):
+           (address_type == AddressType.IPv6 and self._masked_bits == 128):
         label += ':'
       elif self._masked_bits is not None:
         label += '/%i:' % self._masked_bits
       else:
-        label += '/%s:' % self.get_mask()
+        label += f'/{self.get_mask()}:'
 
     if self.is_port_wildcard():
       label += '*'
@@ -979,7 +973,7 @@ class ExitPolicyRule(object):
       else:
         raise ValueError("The '%s' isn't a mask nor number of bits: %s" % (addr_extra, rule))
     elif self.address.startswith('[') and self.address.endswith(']') and \
-      stem.util.connection.is_valid_ipv6_address(self.address[1:-1]):
+        stem.util.connection.is_valid_ipv6_address(self.address[1:-1]):
       # ip6spec ::= ip6 | ip6 "/" num_ip6_bits
       # ip6 ::= an IPv6 address, surrounded by square brackets.
       # num_ip6_bits ::= an integer between 0 and 128
@@ -1027,7 +1021,7 @@ class ExitPolicyRule(object):
         if self.min_port > self.max_port:
           raise ValueError("Port range has a lower bound that's greater than its upper bound: %s" % rule)
       else:
-        raise ValueError('Malformed port range: %s' % rule)
+        raise ValueError(f'Malformed port range: {rule}')
     else:
       raise ValueError("Port value isn't a wildcard, integer, or range: %s" % rule)
 
@@ -1086,16 +1080,17 @@ class MicroExitPolicyRule(ExitPolicyRule):
     return not self == other
 
 
-DEFAULT_POLICY_RULES = tuple([ExitPolicyRule(rule) for rule in (
-  'reject *:25',
-  'reject *:119',
-  'reject *:135-139',
-  'reject *:445',
-  'reject *:563',
-  'reject *:1214',
-  'reject *:4661-4666',
-  'reject *:6346-6429',
-  'reject *:6699',
-  'reject *:6881-6999',
-  'accept *:*',
-)])
+DEFAULT_POLICY_RULES = tuple(
+    ExitPolicyRule(rule) for rule in (
+        'reject *:25',
+        'reject *:119',
+        'reject *:135-139',
+        'reject *:445',
+        'reject *:563',
+        'reject *:1214',
+        'reject *:4661-4666',
+        'reject *:6346-6429',
+        'reject *:6699',
+        'reject *:6881-6999',
+        'accept *:*',
+    ))

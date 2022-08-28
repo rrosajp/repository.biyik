@@ -9,11 +9,9 @@ from . import common
 class search:
     @staticmethod
     def query(txt_filter, first=1, include_total=1, hide_xxx=1):
-        resp = common.call("GET", "search",
-                           txt_filter=txt_filter,
-                           first=first,
-                           hide_xxx=hide_xxx)
-        if resp:
+        if resp := common.call(
+            "GET", "search", txt_filter=txt_filter, first=first, hide_xxx=hide_xxx
+        ):
             return resp.get("results", [])
         else:
             return []

@@ -123,13 +123,13 @@ class index(container.container):
         clsmtd = getattr(clsob, mtd)
         chnmtd = getattr(base, mtd)
         if six.PY2:
-            return not clsmtd.__func__ == chnmtd.__func__
+            return clsmtd.__func__ != chnmtd.__func__
         else:
-            return not clsmtd.__func__ == chnmtd
+            return clsmtd.__func__ != chnmtd
 
     def _context(self, mode=None, *args, **kwargs):
         if mode == "settings":
-            tinyaddon.builtin("Addon.OpenSettings(%s)" % args[0])
+            tinyaddon.builtin(f"Addon.OpenSettings({args[0]})")
         elif mode == "meta":
             with collector.LogException("VODS", const.DB_TOKEN, True) as errcoll:
                 six.next(self.getscrapers(**kwargs))
@@ -146,19 +146,17 @@ class index(container.container):
             return ninfo, nart
         if typ == "movie":
             base = movieextension
-        elif typ == "show":
-            base = showextension
-        elif typ == "episode":
+        elif typ in ["show", "episode"]:
             base = showextension
         else:
             return ninfo, nart
-        mname = "cache%ss" % typ
+        mname = f"cache{typ}s"
         if self._isimp(base, mname):
             path = ".".join([str(x) for x in self.chan._tinyxbmc.values()])
             cachehay = self.hay(path)
             cachekey = json.dumps(arg, sort_keys=True)
-            cinfo = cachehay.find("%s%sinfo" % (cachekey, typ)).data
-            cart = cachehay.find("%s%sart" % (cachekey, typ)).data
+            cinfo = cachehay.find(f"{cachekey}{typ}info").data
+            cart = cachehay.find(f"{cachekey}{typ}art").data
             if cinfo == {} and cart == {} and scrape:
                 cache = getattr(self.chan, mname)
                 with collector.LogException("VODS", const.DB_TOKEN, True) as errcoll:
@@ -168,9 +166,9 @@ class index(container.container):
                 name = cinfo.get("title", info.get("title"))
                 if not name:
                     name = cinfo.get("tvshowtitle", info.get("tvshowtitle", "media"))
-                cachehay.throw("%s%sinfo" % (cachekey, typ), cinfo)
-                cachehay.throw("%s%sart" % (cachekey, typ), cart)
-                if not (cinfo == {} and cart == {}) and percent:
+                cachehay.throw(f"{cachekey}{typ}info", cinfo)
+                cachehay.throw(f"{cachekey}{typ}art", cart)
+                if (cinfo != {} or cart != {}) and percent:
                     self.bgprg.update(int(percent), "Caching", name)
             ninfo.update(cinfo)
             nart.update(cart)
@@ -181,16 +179,16 @@ class index(container.container):
         if info or art:
             hay = self.hay(_resolvehay)
             key = json.dumps(arg, sort_keys=True)
-            if info:
-                hay.throw(key + "_info", info)
-            if art:
-                hay.throw(key + "_art", art)
+        if info:
+            hay.throw(f"{key}_info", info)
+        if art:
+            hay.throw(f"{key}_art", art)
 
     def getscrapers(self, id, addon=None, path=None, package=None, module=None,
                     instance=None, mtd=None, args=[], page=None):
         for plg in extension.getplugins(id, addon, path, package, module, instance):
             ret = None
-            with collector.LogException("VODS ADDON: %s" % plg._tinyxbmc["addon"], None, True) as errcoll:
+            with collector.LogException(f'VODS ADDON: {plg._tinyxbmc["addon"]}', None, True) as errcoll:
                 # channel instantiate
                 chan = plg(self, page, plg._tinyxbmc["addon"])
                 self.chan = chan
@@ -255,7 +253,7 @@ class index(container.container):
                 ninfo, nart = self._cachemeta(arg, info, art, "movie", cache, percent)
                 if ninfo == {}:
                     info = {"title": name}
-                lname = "[%s] %s" % (self.chan.title, name)
+                lname = f"[{self.chan.title}] {name}"
                 li = self.item(lname, ninfo, nart, method="geturls")
                 select = self.item("Select Source", ninfo, nart, method="selecturl")
                 li.context(select, True, arg, **self.chan._tinyxbmc)
@@ -277,7 +275,7 @@ class index(container.container):
                 ninfo, nart = self._cachemeta(arg, info, art, "show", cache, percent)
                 if ninfo == {}:
                     ninfo = {"tvshowtitle": name}
-                lname = "[%s] %s" % (self.chan.title, name)
+                lname = f"[{self.chan.title}] {name}"
                 canseason = self._isimp(showextension, "getseasons")
                 if canseason:
                     li = self.item(lname, ninfo, nart, method="getseasons")
@@ -301,7 +299,7 @@ class index(container.container):
             for i, [name, arg, info, art] in enumerate(self.chan.items):
                 percent = (i + 1) * 100 / numitems
                 ninfo, nart = self._cachemeta(arg, info, art, "episode", cache, percent)
-                lname = "[%s] %s" % (self.chan.title, name)
+                lname = f"[{self.chan.title}] {name}"
                 li = self.item(lname, ninfo, nart, method="geturls")
                 select = self.item("Select Source", ninfo, nart, method="selecturl")
                 if self._isimp(showextension, "cacheepisodes") and not cache:
@@ -395,8 +393,8 @@ class index(container.container):
 
     def selecturl(self, url, **kwargs):
         key = json.dumps(url, sort_keys=True)
-        info = self.hay(_resolvehay).find(key + "_info").data
-        art = self.hay(_resolvehay).find(key + "_art").data
+        info = self.hay(_resolvehay).find(f"{key}_info").data
+        art = self.hay(_resolvehay).find(f"{key}_art").data
         with collector.LogException("VODS", const.DB_TOKEN, True) as errcoll:
             links = six.next(self.getscrapers(mtd="geturls", args=[url], **kwargs))
             if errcoll.hasexception:
