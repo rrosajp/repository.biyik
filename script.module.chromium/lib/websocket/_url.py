@@ -52,10 +52,7 @@ def parse_url(url):
         hostname = parsed.hostname
     else:
         raise ValueError("hostname is invalid")
-    port = 0
-    if parsed.port:
-        port = parsed.port
-
+    port = parsed.port or 0
     is_secure = False
     if scheme == "ws":
         if not port:
@@ -65,15 +62,11 @@ def parse_url(url):
         if not port:
             port = 443
     else:
-        raise ValueError("scheme %s is invalid" % scheme)
+        raise ValueError(f"scheme {scheme} is invalid")
 
-    if parsed.path:
-        resource = parsed.path
-    else:
-        resource = "/"
-
+    resource = parsed.path or "/"
     if parsed.query:
-        resource += "?" + parsed.query
+        resource += f"?{parsed.query}"
 
     return hostname, port, resource, is_secure
 
@@ -109,8 +102,7 @@ def _is_address_in_network(ip, net):
 
 def _is_no_proxy_host(hostname, no_proxy):
     if not no_proxy:
-        v = os.environ.get("no_proxy", "").replace(" ", "")
-        if v:
+        if v := os.environ.get("no_proxy", "").replace(" ", ""):
             no_proxy = v.split(",")
     if not no_proxy:
         no_proxy = DEFAULT_NO_PROXY_HOST
@@ -120,11 +112,16 @@ def _is_no_proxy_host(hostname, no_proxy):
     if hostname in no_proxy:
         return True
     if _is_ip_address(hostname):
-        return any([_is_address_in_network(hostname, subnet) for subnet in no_proxy if _is_subnet_address(subnet)])
-    for domain in [domain for domain in no_proxy if domain.startswith('.')]:
-        if hostname.endswith(domain):
-            return True
-    return False
+        return any(
+            _is_address_in_network(hostname, subnet)
+            for subnet in no_proxy
+            if _is_subnet_address(subnet)
+        )
+
+    return any(
+        hostname.endswith(domain)
+        for domain in [domain for domain in no_proxy if domain.startswith('.')]
+    )
 
 
 def get_proxy_info(
@@ -169,8 +166,7 @@ def get_proxy_info(
         env_keys.insert(0, "https_proxy")
 
     for key in env_keys:
-        value = os.environ.get(key, None)
-        if value:
+        if value := os.environ.get(key, None):
             proxy = urlparse(value)
             auth = (proxy.username, proxy.password) if proxy.username else None
             return proxy.hostname, proxy.port, auth

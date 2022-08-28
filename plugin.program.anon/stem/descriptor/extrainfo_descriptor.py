@@ -223,11 +223,11 @@ def _parse_timestamp_and_interval(keyword, content):
   :raises: **ValueError** if the content is malformed
   """
 
-  line = '%s %s' % (keyword, content)
+  line = f'{keyword} {content}'
   content_match = _timestamp_re.match(content)
 
   if not content_match:
-    raise ValueError('Malformed %s line: %s' % (keyword, line))
+    raise ValueError(f'Malformed {keyword} line: {line}')
 
   timestamp_str, interval, remainder = content_match.groups()
 
@@ -251,11 +251,13 @@ def _parse_extra_info_line(descriptor, entries):
   extra_info_comp = value.split()
 
   if len(extra_info_comp) < 2:
-    raise ValueError('Extra-info line must have two values: extra-info %s' % value)
+    raise ValueError(f'Extra-info line must have two values: extra-info {value}')
   elif not stem.util.tor_tools.is_valid_nickname(extra_info_comp[0]):
     raise ValueError("Extra-info line entry isn't a valid nickname: %s" % extra_info_comp[0])
   elif not stem.util.tor_tools.is_valid_fingerprint(extra_info_comp[1]):
-    raise ValueError('Tor relay fingerprints consist of forty hex digits: %s' % extra_info_comp[1])
+    raise ValueError(
+        f'Tor relay fingerprints consist of forty hex digits: {extra_info_comp[1]}'
+    )
 
   descriptor.nickname = extra_info_comp[0]
   descriptor.fingerprint = extra_info_comp[1]
@@ -283,9 +285,12 @@ def _parse_transport_line(descriptor, entries):
       value_comp = value.split()
 
       if len(value_comp) < 1:
-        raise ValueError('Transport line is missing its transport name: transport %s' % value)
+        raise ValueError(
+            f'Transport line is missing its transport name: transport {value}')
       elif len(value_comp) < 2:
-        raise ValueError('Transport line is missing its address:port value: transport %s' % value)
+        raise ValueError(
+            f'Transport line is missing its address:port value: transport {value}'
+        )
       elif ':' not in value_comp[1]:
         raise ValueError("Transport line's address:port entry is missing a colon: transport %s" % value)
 
@@ -294,9 +299,9 @@ def _parse_transport_line(descriptor, entries):
 
       if not stem.util.connection.is_valid_ipv4_address(address) or \
              stem.util.connection.is_valid_ipv6_address(address, allow_brackets = True):
-        raise ValueError('Transport line has a malformed address: transport %s' % value)
+        raise ValueError(f'Transport line has a malformed address: transport {value}')
       elif not stem.util.connection.is_valid_port(port_str):
-        raise ValueError('Transport line has a malformed port: transport %s' % value)
+        raise ValueError(f'Transport line has a malformed port: transport {value}')
 
       address.lstrip('[').rstrip(']')
       port = int(port_str)
@@ -312,10 +317,11 @@ def _parse_padding_counts_line(descriptor, entries):
 
   value = _value('padding-counts', entries)
   timestamp, interval, remainder = _parse_timestamp_and_interval('padding-counts', value)
-  counts = {}
-
-  for k, v in _mappings_for('padding-counts', remainder, require_value = True):
-    counts[k] = int(v) if v.isdigit() else v
+  counts = {
+      k: int(v) if v.isdigit() else v
+      for k, v in _mappings_for(
+          'padding-counts', remainder, require_value=True)
+  }
 
   setattr(descriptor, 'padding_counts_end', timestamp)
   setattr(descriptor, 'padding_counts_interval', interval)
@@ -335,7 +341,9 @@ def _parse_dirreq_line(keyword, recognized_counts_attr, unrecognized_counts_attr
 
   for status, count in _mappings_for(keyword, value, divider = ','):
     if not count.isdigit():
-      raise ValueError('%s lines should contain %s=COUNT mappings: %s %s' % (keyword, key_type, keyword, value))
+      raise ValueError(
+          f'{keyword} lines should contain {key_type}=COUNT mappings: {keyword} {value}'
+      )
 
     if status in key_set:
       recognized_counts[status] = int(count)
@@ -350,9 +358,9 @@ def _parse_dirreq_share_line(keyword, attribute, descriptor, entries):
   value = _value(keyword, entries)
 
   if not value.endswith('%'):
-    raise ValueError('%s lines should be a percentage: %s %s' % (keyword, keyword, value))
+    raise ValueError(f'{keyword} lines should be a percentage: {keyword} {value}')
   elif float(value[:-1]) < 0:
-    raise ValueError('Negative percentage value: %s %s' % (keyword, value))
+    raise ValueError(f'Negative percentage value: {keyword} {value}')
 
   # bug means it might be above 100%: https://lists.torproject.org/pipermail/tor-dev/2012-June/003679.html
 
@@ -373,7 +381,7 @@ def _parse_cell_line(keyword, attribute, descriptor, entries):
 
         entries.append(float(entry))
       except ValueError:
-        exc = ValueError('Non-numeric entry in %s listing: %s %s' % (keyword, keyword, value))
+        exc = ValueError(f'Non-numeric entry in {keyword} listing: {keyword} {value}')
 
   setattr(descriptor, attribute, entries)
 
@@ -397,7 +405,9 @@ def _parse_conn_bi_direct_line(descriptor, entries):
   stats = remainder.split(',')
 
   if len(stats) != 4 or not (stats[0].isdigit() and stats[1].isdigit() and stats[2].isdigit() and stats[3].isdigit()):
-    raise ValueError('conn-bi-direct line should end with four numeric values: conn-bi-direct %s' % value)
+    raise ValueError(
+        f'conn-bi-direct line should end with four numeric values: conn-bi-direct {value}'
+    )
 
   descriptor.conn_bi_direct_end = timestamp
   descriptor.conn_bi_direct_interval = interval
@@ -418,7 +428,7 @@ def _parse_history_line(keyword, end_attribute, interval_attribute, values_attri
     try:
       history_values = [int(entry) for entry in remainder.split(',')]
     except ValueError:
-      raise ValueError('%s line has non-numeric values: %s %s' % (keyword, keyword, value))
+      raise ValueError(f'{keyword} line has non-numeric values: {keyword} {value}')
 
   setattr(descriptor, end_attribute, timestamp)
   setattr(descriptor, interval_attribute, interval)
@@ -432,7 +442,9 @@ def _parse_port_count_line(keyword, attribute, descriptor, entries):
 
   for port, stat in _mappings_for(keyword, value, divider = ','):
     if (port != 'other' and not stem.util.connection.is_valid_port(port)) or not stat.isdigit():
-      raise ValueError('Entries in %s line should only be PORT=N entries: %s %s' % (keyword, keyword, value))
+      raise ValueError(
+          f'Entries in {keyword} line should only be PORT=N entries: {keyword} {value}'
+      )
 
     port = int(port) if port.isdigit() else port
     port_mappings[port] = int(stat)
@@ -453,7 +465,9 @@ def _parse_geoip_to_count_line(keyword, attribute, descriptor, entries):
 
   for locale, count in _mappings_for(keyword, value, divider = ','):
     if not _locale_re.match(locale) or not count.isdigit():
-      raise ValueError('Entries in %s line should only be CC=N entries: %s %s' % (keyword, keyword, value))
+      raise ValueError(
+          f'Entries in {keyword} line should only be CC=N entries: {keyword} {value}'
+      )
 
     locale_usage[locale] = int(count)
 
@@ -465,7 +479,9 @@ def _parse_bridge_ip_versions_line(descriptor, entries):
 
   for protocol, count in _mappings_for('bridge-ip-versions', value, divider = ','):
     if not count.isdigit():
-      raise stem.ProtocolError('IP protocol count was non-numeric (%s): bridge-ip-versions %s' % (count, value))
+      raise stem.ProtocolError(
+          f'IP protocol count was non-numeric ({count}): bridge-ip-versions {value}'
+      )
 
     ip_versions[protocol] = int(count)
 
@@ -477,7 +493,9 @@ def _parse_bridge_ip_transports_line(descriptor, entries):
 
   for protocol, count in _mappings_for('bridge-ip-transports', value, divider = ','):
     if not count.isdigit():
-      raise stem.ProtocolError('Transport count was non-numeric (%s): bridge-ip-transports %s' % (count, value))
+      raise stem.ProtocolError(
+          f'Transport count was non-numeric ({count}): bridge-ip-transports {value}'
+      )
 
     ip_transports[protocol] = int(count)
 
@@ -494,11 +512,7 @@ def _parse_hs_stats(keyword, stat_attribute, extra_attribute, descriptor, entrie
   elif value == '':
     raise ValueError("'%s' line was blank" % keyword)
   else:
-    if ' ' in value:
-      stat_value, remainder = value.split(' ', 1)
-    else:
-      stat_value, remainder = value, None
-
+    stat_value, remainder = value.split(' ', 1) if ' ' in value else (value, None)
     try:
       stat = int(stat_value)
     except ValueError:
@@ -925,26 +939,25 @@ class RelayExtraInfoDescriptor(ExtraInfoDescriptor):
   @classmethod
   def content(cls, attr = None, exclude = (), sign = False, signing_key = None):
     base_header = (
-      ('extra-info', '%s %s' % (_random_nickname(), _random_fingerprint())),
-      ('published', _random_date()),
-    )
+        'extra-info',
+        f'{_random_nickname()} {_random_fingerprint()}',
+    ), ('published', _random_date())
 
     if signing_key:
       sign = True
 
-    if sign:
-      if attr and 'router-signature' in attr:
-        raise ValueError('Cannot sign the descriptor if a router-signature has been provided')
-
-      if signing_key is None:
-        signing_key = create_signing_key()
-
-      content = _descriptor_content(attr, exclude, base_header) + b'\nrouter-signature\n'
-      return _append_router_signature(content, signing_key.private)
-    else:
+    if not sign:
       return _descriptor_content(attr, exclude, base_header, (
         ('router-signature', _random_crypto_blob('SIGNATURE')),
       ))
+    if attr and 'router-signature' in attr:
+      raise ValueError('Cannot sign the descriptor if a router-signature has been provided')
+
+    if signing_key is None:
+      signing_key = create_signing_key()
+
+    content = _descriptor_content(attr, exclude, base_header) + b'\nrouter-signature\n'
+    return _append_router_signature(content, signing_key.private)
 
   @classmethod
   def create(cls, attr = None, exclude = (), validate = True, sign = False, signing_key = None):
@@ -965,7 +978,9 @@ class RelayExtraInfoDescriptor(ExtraInfoDescriptor):
 
       return stem.descriptor._encode_digest(hashlib.sha256(self.get_bytes()), encoding)
     else:
-      raise NotImplementedError('Extrainfo descriptor digests are only available in sha1 and sha256, not %s' % hash_type)
+      raise NotImplementedError(
+          f'Extrainfo descriptor digests are only available in sha1 and sha256, not {hash_type}'
+      )
 
 
 class BridgeExtraInfoDescriptor(ExtraInfoDescriptor):
@@ -997,14 +1012,17 @@ class BridgeExtraInfoDescriptor(ExtraInfoDescriptor):
   @classmethod
   def content(cls, attr = None, exclude = (), sign = False):
     if sign:
-      raise NotImplementedError('Signing of %s not implemented' % cls.__name__)
+      raise NotImplementedError(f'Signing of {cls.__name__} not implemented')
 
-    return _descriptor_content(attr, exclude, (
-      ('extra-info', 'ec2bridgereaac65a3 %s' % _random_fingerprint()),
-      ('published', _random_date()),
-    ), (
-      ('router-digest', _random_fingerprint()),
-    ))
+    return _descriptor_content(
+        attr,
+        exclude,
+        (
+            ('extra-info', f'ec2bridgereaac65a3 {_random_fingerprint()}'),
+            ('published', _random_date()),
+        ),
+        (('router-digest', _random_fingerprint()), ),
+    )
 
   def digest(self, hash_type = DigestHash.SHA1, encoding = DigestEncoding.HEX):
     if hash_type == DigestHash.SHA1 and encoding == DigestEncoding.HEX:
@@ -1012,7 +1030,9 @@ class BridgeExtraInfoDescriptor(ExtraInfoDescriptor):
     elif hash_type == DigestHash.SHA256 and encoding == DigestEncoding.BASE64:
       return self.router_digest_sha256
     else:
-      raise NotImplementedError('Bridge extrainfo digests are only available as sha1/hex and sha256/base64, not %s/%s' % (hash_type, encoding))
+      raise NotImplementedError(
+          f'Bridge extrainfo digests are only available as sha1/hex and sha256/base64, not {hash_type}/{encoding}'
+      )
 
   def _required_fields(self):
     excluded_fields = [

@@ -32,16 +32,16 @@ class proxydt(datetime.datetime):
 
     @staticmethod
     def strptime(date_string, fmt):
-        return datetime.datetime(*(time.strptime(date_string, fmt)[0:6]))
+        return datetime.datetime(*time.strptime(date_string, fmt)[:6])
 
 
 def getconfig(prefix):
     setting = addon.kodisetting("plugin.program.vods-players")
-    uname = setting.getstr("%s_uname" % prefix)
-    source = setting.getstr("%s_source" % prefix)
-    branch = setting.getstr("%s_branch" % prefix)
-    bsource = setting.getstr("%s_branch_source" % prefix)
-    commit = setting.getstr("%s_commit" % prefix)
+    uname = setting.getstr(f"{prefix}_uname")
+    source = setting.getstr(f"{prefix}_source")
+    branch = setting.getstr(f"{prefix}_branch")
+    bsource = setting.getstr(f"{prefix}_branch_source")
+    commit = setting.getstr(f"{prefix}_commit")
     if source == "Latest Release":
         branch = None
     if commit.lower().strip() == "latest":

@@ -145,24 +145,23 @@ def decode_dict(x, f, force_sort=True):
 
 
 # noinspection PyDictCreation
-decode_func = {}
-decode_func[b'l'] = decode_list
-decode_func[b'i'] = decode_int
-decode_func[b'0'] = decode_string
-decode_func[b'1'] = decode_string
-decode_func[b'2'] = decode_string
-decode_func[b'3'] = decode_string
-decode_func[b'4'] = decode_string
-decode_func[b'5'] = decode_string
-decode_func[b'6'] = decode_string
-decode_func[b'7'] = decode_string
-decode_func[b'8'] = decode_string
-decode_func[b'9'] = decode_string
-
-if sys.version_info[0] == 2 and sys.version_info[1] == 6:
-    decode_func[b'd'] = decode_dict_py26
-else:
-    decode_func[b'd'] = decode_dict
+decode_func = {
+    b'l': decode_list,
+    b'i': decode_int,
+    b'0': decode_string,
+    b'1': decode_string,
+    b'2': decode_string,
+    b'3': decode_string,
+    b'4': decode_string,
+    b'5': decode_string,
+    b'6': decode_string,
+    b'7': decode_string,
+    b'8': decode_string,
+    b'9': decode_string,
+    b'd': decode_dict_py26
+    if sys.version_info[0] == 2 and sys.version_info[1] == 6
+    else decode_dict,
+}
 
 
 def bdecode(value):
@@ -177,7 +176,7 @@ def bdecode(value):
     :rtype: object
     """
     try:
-        r, l = decode_func[value[0:1]](value, 0)
+        r, l = decode_func[value[:1]](value, 0)
     except (IndexError, KeyError, TypeError, ValueError):
         raise BencodeDecodeError("not a valid bencoded string")
 
@@ -241,9 +240,7 @@ def encode_list(x, r):
 def encode_dict(x, r):
     # type: (Dict, Deque[bytes]) -> None
     r.append(b'd')
-    ilist = list(x.items())
-    ilist.sort()
-
+    ilist = sorted(x.items())
     for k, v in ilist:
         k = k.encode('utf-8')
         r.extend((str(len(k)).encode('utf-8'), b':', k))
@@ -253,9 +250,7 @@ def encode_dict(x, r):
 
 
 # noinspection PyDictCreation
-encode_func = {}
-encode_func[Bencached] = encode_bencached
-
+encode_func = {Bencached: encode_bencached}
 if sys.version_info[0] == 2:
     from types import DictType, IntType, ListType, LongType, StringType, TupleType, UnicodeType
 

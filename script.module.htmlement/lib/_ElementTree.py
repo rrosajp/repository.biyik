@@ -104,19 +104,13 @@ import warnings
 class _SimpleElementPath(object):
     # emulate pre-1.2 find/findtext/findall behaviour
     def find(self, element, tag, namespaces=None):
-        for elem in element:
-            if elem.tag == tag:
-                return elem
-        return None
+        return next((elem for elem in element if elem.tag == tag), None)
     def findtext(self, element, tag, default=None, namespaces=None):
         elem = self.find(element, tag)
-        if elem is None:
-            return default
-        return elem.text or ""
+        return default if elem is None else elem.text or ""
     def iterfind(self, element, tag, namespaces=None):
         if tag[:3] == ".//":
-            for elem in element.iter(tag[3:]):
-                yield elem
+            yield from element.iter(tag[3:])
         for elem in element:
             if elem.tag == tag:
                 yield elem
@@ -474,8 +468,7 @@ class Element(object):
         if tag is None or self.tag == tag:
             yield self
         for e in self._children:
-            for e in e.iter(tag):
-                yield e
+            yield from e.iter(tag)
 
     # compatibility
     def getiterator(self, tag=None):
@@ -502,8 +495,7 @@ class Element(object):
         if self.text:
             yield self.text
         for e in self:
-            for s in e.itertext():
-                yield s
+            yield from e.itertext()
             if e.tail:
                 yield e.tail
 
@@ -562,7 +554,7 @@ def ProcessingInstruction(target, text=None):
     element = Element(ProcessingInstruction)
     element.text = target
     if text:
-        element.text = element.text + " " + text
+        element.text = f"{element.text} {text}"
     return element
 
 PI = ProcessingInstruction
@@ -650,10 +642,10 @@ class ElementTree(object):
             if not parser:
                 parser = XMLParser(target=TreeBuilder())
             while 1:
-                data = source.read(65536)
-                if not data:
+                if data := source.read(65536):
+                    parser.feed(data)
+                else:
                     break
-                parser.feed(data)
             self._root = parser.close()
             return self._root
         finally:
@@ -694,7 +686,7 @@ class ElementTree(object):
     def find(self, path, namespaces=None):
         # assert self._root is not None
         if path[:1] == "/":
-            path = "." + path
+            path = f".{path}"
             warnings.warn(
                 "This search is broken in 1.3 and earlier, and will be "
                 "fixed in a future version.  If you rely on the current "
@@ -718,7 +710,7 @@ class ElementTree(object):
     def findtext(self, path, default=None, namespaces=None):
         # assert self._root is not None
         if path[:1] == "/":
-            path = "." + path
+            path = f".{path}"
             warnings.warn(
                 "This search is broken in 1.3 and earlier, and will be "
                 "fixed in a future version.  If you rely on the current "
@@ -739,7 +731,7 @@ class ElementTree(object):
     def findall(self, path, namespaces=None):
         # assert self._root is not None
         if path[:1] == "/":
-            path = "." + path
+            path = f".{path}"
             warnings.warn(
                 "This search is broken in 1.3 and earlier, and will be "
                 "fixed in a future version.  If you rely on the current "
@@ -761,7 +753,7 @@ class ElementTree(object):
     def iterfind(self, path, namespaces=None):
         # assert self._root is not None
         if path[:1] == "/":
-            path = "." + path
+            path = f".{path}"
             warnings.warn(
                 "This search is broken in 1.3 and earlier, and will be "
                 "fixed in a future version.  If you rely on the current "
@@ -802,10 +794,7 @@ class ElementTree(object):
             file = open(file_or_filename, "wb")
         write = file.write
         if not encoding:
-            if method == "c14n":
-                encoding = "utf-8"
-            else:
-                encoding = "us-ascii"
+            encoding = "utf-8" if method == "c14n" else "us-ascii"
         elif xml_declaration or (xml_declaration is None and
                                  encoding not in ("utf-8", "us-ascii")):
             if method == "xml":
@@ -854,10 +843,7 @@ def _namespaces(elem, encoding, default_namespace=None):
                         prefix = "ns%d" % len(namespaces)
                     if prefix != "xml":
                         namespaces[uri] = prefix
-                if prefix:
-                    qnames[qname] = encode("%s:%s" % (prefix, tag))
-                else:
-                    qnames[qname] = encode(tag) # default element
+                qnames[qname] = encode(f"{prefix}:{tag}") if prefix else encode(tag)
             else:
                 if default_namespace:
                     # FIXME: can this be handled in XML 1.0?
@@ -911,14 +897,14 @@ def _serialize_xml(write, elem, encoding, qnames, namespaces):
             for e in elem:
                 _serialize_xml(write, e, encoding, qnames, None)
         else:
-            write("<" + tag)
+            write(f"<{tag}")
             items = elem.items()
             if items or namespaces:
                 if namespaces:
                     for v, k in sorted(namespaces.items(),
                                        key=lambda x: x[1]):  # sort on prefix
                         if k:
-                            k = ":" + k
+                            k = f":{k}"
                         write(" xmlns%s=\"%s\"" % (
                             k.encode(encoding),
                             _escape_attrib(v, encoding)
@@ -926,10 +912,7 @@ def _serialize_xml(write, elem, encoding, qnames, namespaces):
                 for k, v in sorted(items):  # lexical order
                     if isinstance(k, QName):
                         k = k.text
-                    if isinstance(v, QName):
-                        v = qnames[v.text]
-                    else:
-                        v = _escape_attrib(v, encoding)
+                    v = qnames[v.text] if isinstance(v, QName) else _escape_attrib(v, encoding)
                     write(" %s=\"%s\"" % (qnames[k], v))
             if text or len(elem):
                 write(">")
@@ -937,7 +920,7 @@ def _serialize_xml(write, elem, encoding, qnames, namespaces):
                     write(_escape_cdata(text, encoding))
                 for e in elem:
                     _serialize_xml(write, e, encoding, qnames, None)
-                write("</" + tag + ">")
+                write(f"</{tag}" + ">")
             else:
                 write(" />")
     if elem.tail:

@@ -32,7 +32,7 @@ NO = "[COLOR red]N[/COLOR]"
 
 
 def BLUE(txt):
-    return "[COLOR blue]%s[/COLOR]" % txt
+    return f"[COLOR blue]{txt}[/COLOR]"
 
 
 DHT_TIMEOUT = 30

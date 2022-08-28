@@ -287,10 +287,9 @@ class BaseSocket(object):
         # If we get it then great, we can close safely. If not then one of the
         # above are in progress and we leave the close to them.
 
-        if self.is_alive():
-          if self._send_lock.acquire(False):
-            self.close()
-            self._send_lock.release()
+        if self.is_alive() and self._send_lock.acquire(False):
+          self.close()
+          self._send_lock.release()
 
         raise
 
@@ -402,16 +401,15 @@ class RelaySocket(BaseSocket):
     def wrapped_recv(s, sf):
       if timeout is None:
         return s.recv()
-      else:
-        s.setblocking(0)
-        s.settimeout(timeout)
+      s.setblocking(0)
+      s.settimeout(timeout)
 
-        try:
-          return s.recv()
-        except (socket.timeout, ssl.SSLError, ssl.SSLWantReadError):
-          return None
-        finally:
-          s.setblocking(1)
+      try:
+        return s.recv()
+      except (socket.timeout, ssl.SSLError, ssl.SSLWantReadError):
+        return None
+      finally:
+        s.setblocking(1)
 
     return self._recv(wrapped_recv)
 
@@ -627,7 +625,7 @@ def send_message(control_file, message, raw = False):
   if log.is_tracing():
     log_message = message.replace('\r\n', '\n').rstrip()
     msg_div = '\n' if '\n' in log_message else ' '
-    log.trace('Sent to tor:%s%s' % (msg_div, log_message))
+    log.trace(f'Sent to tor:{msg_div}{log_message}')
 
 
 def _write_to_socket(socket_file, message):
@@ -635,7 +633,7 @@ def _write_to_socket(socket_file, message):
     socket_file.write(stem.util.str_tools._to_bytes(message))
     socket_file.flush()
   except socket.error as exc:
-    log.info('Failed to send: %s' % exc)
+    log.info(f'Failed to send: {exc}')
 
     # When sending there doesn't seem to be a reliable method for
     # distinguishing between failures from a disconnect verses other things.

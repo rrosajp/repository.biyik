@@ -143,7 +143,7 @@ class AsyncTest(object):
   """
 
   def __init__(self, runner, args = None, threaded = False):
-    self.name = '%s.%s' % (runner.__module__, runner.__name__)
+    self.name = f'{runner.__module__}.{runner.__name__}'
 
     self._runner = runner
     self._runner_args = args
@@ -189,9 +189,9 @@ class AsyncTest(object):
 
         if self._threaded:
           self._process = threading.Thread(
-            target = _wrapper,
-            args = (child_pipe, self._runner, self._runner_args),
-            name = 'Background test of %s' % self.name,
+              target=_wrapper,
+              args=(child_pipe, self._runner, self._runner_args),
+              name=f'Background test of {self.name}',
           )
 
           self._process.setDaemon(True)
@@ -221,12 +221,11 @@ class AsyncTest(object):
         self._process.join()
         self._status = AsyncStatus.FINISHED
 
-      if test and self._result.type == 'failure':
-        test.fail(self._result.msg)
-      elif test and self._result.type == 'error':
-        test.fail(self._result.msg)
-      elif test and self._result.type == 'skipped':
-        test.skipTest(self._result.msg)
+      if test:
+        if self._result.type in ['failure', 'error']:
+          test.fail(self._result.msg)
+        elif self._result.type == 'skipped':
+          test.skipTest(self._result.msg)
 
 
 class Issue(collections.namedtuple('Issue', ['line_number', 'message', 'line'])):
@@ -251,6 +250,8 @@ class TimedTestRunner(unittest.TextTestRunner):
   def run(self, test):
     for t in test._tests:
       original_type = type(t)
+
+
 
       class _TestWrapper(original_type):
         def run(self, result = None):
@@ -285,23 +286,25 @@ class TimedTestRunner(unittest.TextTestRunner):
           vended API then please let us know.
           """
 
-          return self.assertRaisesRegexp(exc_type, '^%s$' % re.escape(exc_msg), func, *args, **kwargs)
+          return self.assertRaisesRegexp(exc_type, f'^{re.escape(exc_msg)}$',
+                                         func, *args, **kwargs)
 
         def assertRaisesRegexp(self, exc_type, exc_msg, func, *args, **kwargs):
-          if stem.prereq._is_python_26():
-            try:
-              func(*args, **kwargs)
-              self.fail('Expected a %s to be raised but nothing was' % exc_type)
-            except exc_type as exc:
-              self.assertTrue(re.search(exc_msg, str(exc), re.MULTILINE))
-          else:
+          if not stem.prereq._is_python_26():
             return super(original_type, self).assertRaisesRegexp(exc_type, exc_msg, func, *args, **kwargs)
 
+          try:
+            func(*args, **kwargs)
+            self.fail(f'Expected a {exc_type} to be raised but nothing was')
+          except exc_type as exc:
+            self.assertTrue(re.search(exc_msg, str(exc), re.MULTILINE))
+
         def id(self):
-          return '%s.%s.%s' % (original_type.__module__, original_type.__name__, self._testMethodName)
+          return f'{original_type.__module__}.{original_type.__name__}.{self._testMethodName}'
 
         def __str__(self):
-          return '%s (%s.%s)' % (self._testMethodName, original_type.__module__, original_type.__name__)
+          return f'{self._testMethodName} ({original_type.__module__}.{original_type.__name__})'
+
 
       t.__class__ = _TestWrapper
 
@@ -349,7 +352,7 @@ def clean_orphaned_pyc(paths):
       # If we're running python 3 then the *.pyc files are no longer bundled
       # with the *.py. Rather, they're in a __pycache__ directory.
 
-      pycache = '%s__pycache__%s' % (os.path.sep, os.path.sep)
+      pycache = f'{os.path.sep}__pycache__{os.path.sep}'
 
       if pycache in pyc_path:
         directory, pycache_filename = pyc_path.split(pycache, 1)
@@ -479,6 +482,8 @@ def stylistic_issues(paths, check_newlines = False, check_exception_keyword = Fa
     else:
       import pycodestyle
 
+
+
     class StyleReport(pycodestyle.BaseReport):
       def init_file(self, filename, lines, expected, line_offset):
         super(StyleReport, self).init_file(filename, lines, expected, line_offset)
@@ -515,14 +520,15 @@ def stylistic_issues(paths, check_newlines = False, check_exception_keyword = Fa
 
             issues.setdefault(filename, []).append(Issue(index + 1, "except clause should use 'as', not comma", line))
 
-          if prefer_single_quotes and not is_block_comment:
-            if '"' in content and "'" not in content and '"""' not in content and not content.endswith('\\'):
-              # Checking if the line already has any single quotes since that
-              # usually means double quotes are preferable for the content (for
-              # instance "I'm hungry"). Also checking for '\' at the end since
-              # that can indicate a multi-line string.
+          if (prefer_single_quotes and not is_block_comment and '"' in content
+              and "'" not in content and '"""' not in content
+              and not content.endswith('\\')):
+            # Checking if the line already has any single quotes since that
+            # usually means double quotes are preferable for the content (for
+            # instance "I'm hungry"). Also checking for '\' at the end since
+            # that can indicate a multi-line string.
 
-              issues.setdefault(filename, []).append(Issue(index + 1, 'use single rather than double quotes', line))
+            issues.setdefault(filename, []).append(Issue(index + 1, 'use single rather than double quotes', line))
 
       def error(self, line_number, offset, text, check):
         code = super(StyleReport, self).error(line_number, offset, text, check)
@@ -532,6 +538,7 @@ def stylistic_issues(paths, check_newlines = False, check_exception_keyword = Fa
 
           if not is_ignored(self.filename, code, line):
             issues.setdefault(self.filename, []).append(Issue(line_number, text, line))
+
 
     style_checker = pycodestyle.StyleGuide(ignore = ignore_rules, reporter = StyleReport)
     style_checker.check_files(list(_python_files(paths)))
@@ -641,13 +648,9 @@ def _module_exists(module_name):
 def _python_files(paths):
   for path in paths:
     for file_path in stem.util.system.files_with_suffix(path, '.py'):
-      skip = False
-
-      for exclude_path in CONFIG['exclude_paths']:
-        if re.match(exclude_path, file_path):
-          skip = True
-          break
-
+      skip = any(
+          re.match(exclude_path, file_path)
+          for exclude_path in CONFIG['exclude_paths'])
       if not skip:
         yield file_path
 

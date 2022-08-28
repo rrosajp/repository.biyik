@@ -220,10 +220,10 @@ def _parse_file(descriptor_file, is_bridge = False, validate = False, **kwargs):
         yield BridgeDescriptor(descriptor_text, validate, annotations, **kwargs)
       else:
         yield RelayDescriptor(descriptor_text, validate, annotations, **kwargs)
-    else:
-      if validate and annotations:
-        raise ValueError('Content conform to being a server descriptor:\n%s' % '\n'.join(annotations))
+    elif validate and annotations:
+      raise ValueError('Content conform to being a server descriptor:\n%s' % '\n'.join(annotations))
 
+    else:
       break  # done parsing descriptors
 
 
@@ -234,7 +234,7 @@ def _parse_router_line(descriptor, entries):
   router_comp = value.split()
 
   if len(router_comp) < 5:
-    raise ValueError('Router line must have five values: router %s' % value)
+    raise ValueError(f'Router line must have five values: router {value}')
   elif not stem.util.tor_tools.is_valid_nickname(router_comp[0]):
     raise ValueError("Router line entry isn't a valid nickname: %s" % router_comp[0])
   elif not stem.util.connection.is_valid_ipv4_address(router_comp[1]):
@@ -260,7 +260,7 @@ def _parse_bandwidth_line(descriptor, entries):
   bandwidth_comp = value.split()
 
   if len(bandwidth_comp) < 3:
-    raise ValueError('Bandwidth line must have three values: bandwidth %s' % value)
+    raise ValueError(f'Bandwidth line must have three values: bandwidth {value}')
   elif not bandwidth_comp[0].isdigit():
     raise ValueError("Bandwidth line's average rate isn't numeric: %s" % bandwidth_comp[0])
   elif not bandwidth_comp[1].isdigit():
@@ -288,9 +288,7 @@ def _parse_platform_line(descriptor, entries):
   # version, but might as well try to save our caller the effort.
 
   value = _value('platform', entries)
-  platform_match = re.match('^(?:node-)?Tor (\\S*).* on (.*)$', value)
-
-  if platform_match:
+  if platform_match := re.match('^(?:node-)?Tor (\\S*).* on (.*)$', value):
     version_str, descriptor.operating_system = platform_match.groups()
 
     try:
@@ -308,10 +306,13 @@ def _parse_fingerprint_line(descriptor, entries):
 
   for grouping in value.split(' '):
     if len(grouping) != 4:
-      raise ValueError('Fingerprint line should have groupings of four hex digits: %s' % value)
+      raise ValueError(
+          f'Fingerprint line should have groupings of four hex digits: {value}'
+      )
 
   if not stem.util.tor_tools.is_valid_fingerprint(fingerprint):
-    raise ValueError('Tor relay fingerprints consist of forty hex digits: %s' % value)
+    raise ValueError(
+        f'Tor relay fingerprints consist of forty hex digits: {value}')
 
   descriptor.fingerprint = fingerprint
 
@@ -321,7 +322,8 @@ def _parse_extrainfo_digest_line(descriptor, entries):
   digest_comp = value.split(' ')
 
   if not stem.util.tor_tools.is_hex_digits(digest_comp[0], 40):
-    raise ValueError('extra-info-digest should be 40 hex characters: %s' % digest_comp[0])
+    raise ValueError(
+        f'extra-info-digest should be 40 hex characters: {digest_comp[0]}')
 
   descriptor.extra_info_digest = digest_comp[0]
   descriptor.extra_info_sha256_digest = digest_comp[1] if len(digest_comp) >= 2 else None
@@ -333,7 +335,8 @@ def _parse_hibernating_line(descriptor, entries):
   value = _value('hibernating', entries)
 
   if value not in ('0', '1'):
-    raise ValueError('Hibernating line had an invalid value, must be zero or one: %s' % value)
+    raise ValueError(
+        f'Hibernating line had an invalid value, must be zero or one: {value}')
 
   descriptor.hibernating = value == '1'
 
@@ -343,7 +346,9 @@ def _parse_protocols_line(descriptor, entries):
   protocols_match = re.match('^Link (.*) Circuit (.*)$', value)
 
   if not protocols_match:
-    raise ValueError('Protocols line did not match the expected pattern: protocols %s' % value)
+    raise ValueError(
+        f'Protocols line did not match the expected pattern: protocols {value}'
+    )
 
   link_versions, circuit_versions = protocols_match.groups()
   descriptor.link_protocols = link_versions.split(' ')
@@ -355,18 +360,18 @@ def _parse_or_address_line(descriptor, entries):
   or_addresses = []
 
   for entry in all_values:
-    line = 'or-address %s' % entry
+    line = f'or-address {entry}'
 
     if ':' not in entry:
-      raise ValueError('or-address line missing a colon: %s' % line)
+      raise ValueError(f'or-address line missing a colon: {line}')
 
     address, port = entry.rsplit(':', 1)
 
     if not stem.util.connection.is_valid_ipv4_address(address) and not stem.util.connection.is_valid_ipv6_address(address, allow_brackets = True):
-      raise ValueError('or-address line has a malformed address: %s' % line)
+      raise ValueError(f'or-address line has a malformed address: {line}')
 
     if not stem.util.connection.is_valid_port(port):
-      raise ValueError('or-address line has a malformed port: %s' % line)
+      raise ValueError(f'or-address line has a malformed port: {line}')
 
     or_addresses.append((address.lstrip('[').rstrip(']'), int(port), stem.util.connection.is_valid_ipv6_address(address, allow_brackets = True)))
 
@@ -383,7 +388,7 @@ def _parse_history_line(keyword, history_end_attribute, history_interval_attribu
     else:
       history_values = []
   except ValueError:
-    raise ValueError('%s line has non-numeric values: %s %s' % (keyword, keyword, value))
+    raise ValueError(f'{keyword} line has non-numeric values: {keyword} {value}')
 
   setattr(descriptor, history_end_attribute, timestamp)
   setattr(descriptor, history_interval_attribute, interval)
@@ -615,7 +620,7 @@ class ServerDescriptor(Descriptor):
     """
 
     super(ServerDescriptor, self).__init__(raw_contents, lazy_load = not validate)
-    self._annotation_lines = annotations if annotations else []
+    self._annotation_lines = annotations or []
 
     # A descriptor contains a series of 'keyword lines' which are simply a
     # keyword followed by an optional value. Lines can also be followed by a
@@ -641,9 +646,9 @@ class ServerDescriptor(Descriptor):
       # if we have a negative uptime and a tor version that shouldn't exhibit
       # this bug then fail validation
 
-      if validate and self.uptime and self.tor_version:
-        if self.uptime < 0 and self.tor_version >= stem.version.Version('0.1.2.7'):
-          raise ValueError("Descriptor for version '%s' had a negative uptime value: %i" % (self.tor_version, self.uptime))
+      if (validate and self.uptime and self.tor_version and self.uptime < 0
+          and self.tor_version >= stem.version.Version('0.1.2.7')):
+        raise ValueError("Descriptor for version '%s' had a negative uptime value: %i" % (self.tor_version, self.uptime))
 
       self._check_constraints(entries)
     else:
@@ -845,19 +850,25 @@ class RelayDescriptor(ServerDescriptor):
         key_hash = hashlib.sha1(_bytes_for_block(self.signing_key)).hexdigest()
 
         if key_hash != self.fingerprint.lower():
-          raise ValueError('Fingerprint does not match the hash of our signing key (fingerprint: %s, signing key hash: %s)' % (self.fingerprint.lower(), key_hash))
+          raise ValueError(
+              f'Fingerprint does not match the hash of our signing key (fingerprint: {self.fingerprint.lower()}, signing key hash: {key_hash})'
+          )
 
       if not skip_crypto_validation and stem.prereq.is_crypto_available():
         signed_digest = self._digest_for_signature(self.signing_key, self.signature)
 
         if signed_digest != self.digest():
-          raise ValueError('Decrypted digest does not match local digest (calculated: %s, local: %s)' % (signed_digest, self.digest()))
+          raise ValueError(
+              f'Decrypted digest does not match local digest (calculated: {signed_digest}, local: {self.digest()})'
+          )
 
         if self.onion_key_crosscert and stem.prereq.is_crypto_available():
           onion_key_crosscert_digest = self._digest_for_signature(self.onion_key, self.onion_key_crosscert)
 
           if onion_key_crosscert_digest != self._onion_key_crosscert_digest():
-            raise ValueError('Decrypted onion-key-crosscert digest does not match local digest (calculated: %s, local: %s)' % (onion_key_crosscert_digest, self._onion_key_crosscert_digest()))
+            raise ValueError(
+                f'Decrypted onion-key-crosscert digest does not match local digest (calculated: {onion_key_crosscert_digest}, local: {self._onion_key_crosscert_digest()})'
+            )
 
       if stem.prereq._is_crypto_ed25519_supported() and self.certificate:
         self.certificate.validate(self)
@@ -873,39 +884,41 @@ class RelayDescriptor(ServerDescriptor):
     if exit_policy is None:
       exit_policy = REJECT_ALL_POLICY
 
-    base_header = [
-      ('router', '%s %s 9001 0 0' % (_random_nickname(), _random_ipv4_address())),
-      ('published', _random_date()),
-      ('bandwidth', '153600 256000 104590'),
-    ] + [
-      tuple(line.split(' ', 1)) for line in str(exit_policy).splitlines()
-    ] + [
-      ('onion-key', _random_crypto_blob('RSA PUBLIC KEY')),
-      ('signing-key', _random_crypto_blob('RSA PUBLIC KEY')),
-    ]
+    base_header = ([
+        (
+            'router',
+            f'{_random_nickname()} {_random_ipv4_address()} 9001 0 0',
+        ),
+        ('published', _random_date()),
+        ('bandwidth', '153600 256000 104590'),
+    ] + [tuple(line.split(' ', 1))
+         for line in str(exit_policy).splitlines()]) + [
+             ('onion-key', _random_crypto_blob('RSA PUBLIC KEY')),
+             ('signing-key', _random_crypto_blob('RSA PUBLIC KEY')),
+         ]
 
-    if sign:
-      if attr and 'signing-key' in attr:
-        raise ValueError('Cannot sign the descriptor if a signing-key has been provided')
-      elif attr and 'router-signature' in attr:
-        raise ValueError('Cannot sign the descriptor if a router-signature has been provided')
-
-      if signing_key is None:
-        signing_key = create_signing_key()
-
-      if 'fingerprint' not in attr:
-        fingerprint = hashlib.sha1(_bytes_for_block(stem.util.str_tools._to_unicode(signing_key.public_digest.strip()))).hexdigest().upper()
-        attr['fingerprint'] = ' '.join(stem.util.str_tools._split_by_length(fingerprint, 4))
-
-      attr['signing-key'] = signing_key.public_digest
-
-      content = _descriptor_content(attr, exclude, base_header) + b'\nrouter-signature\n'
-      return _append_router_signature(content, signing_key.private)
-    else:
+    if not sign:
       return _descriptor_content(attr, exclude, base_header, (
         ('router-sig-ed25519', None),
         ('router-signature', _random_crypto_blob('SIGNATURE')),
       ))
+    if attr:
+      if 'signing-key' in attr:
+        raise ValueError('Cannot sign the descriptor if a signing-key has been provided')
+      elif 'router-signature' in attr:
+        raise ValueError('Cannot sign the descriptor if a router-signature has been provided')
+
+    if signing_key is None:
+      signing_key = create_signing_key()
+
+    if 'fingerprint' not in attr:
+      fingerprint = hashlib.sha1(_bytes_for_block(stem.util.str_tools._to_unicode(signing_key.public_digest.strip()))).hexdigest().upper()
+      attr['fingerprint'] = ' '.join(stem.util.str_tools._split_by_length(fingerprint, 4))
+
+    attr['signing-key'] = signing_key.public_digest
+
+    content = _descriptor_content(attr, exclude, base_header) + b'\nrouter-signature\n'
+    return _append_router_signature(content, signing_key.private)
 
   @classmethod
   def create(cls, attr = None, exclude = (), validate = True, sign = False, signing_key = None, exit_policy = None):
@@ -928,7 +941,9 @@ class RelayDescriptor(ServerDescriptor):
     elif hash_type == DigestHash.SHA256:
       return stem.descriptor._encode_digest(hashlib.sha256(content), encoding)
     else:
-      raise NotImplementedError('Server descriptor digests are only available in sha1 and sha256, not %s' % hash_type)
+      raise NotImplementedError(
+          f'Server descriptor digests are only available in sha1 and sha256, not {hash_type}'
+      )
 
   def make_router_status_entry(self):
     """
@@ -958,13 +973,13 @@ class RelayDescriptor(ServerDescriptor):
     }
 
     if self.tor_version:
-      attr['v'] = 'Tor %s' % self.tor_version
+      attr['v'] = f'Tor {self.tor_version}'
 
     if self.or_addresses:
-      attr['a'] = ['%s:%s' % (addr, port) for addr, port, _ in self.or_addresses]
+      attr['a'] = [f'{addr}:{port}' for addr, port, _ in self.or_addresses]
 
     if self.certificate:
-      attr['id'] = 'ed25519 %s' % _truncated_b64encode(self.certificate.key)
+      attr['id'] = f'ed25519 {_truncated_b64encode(self.certificate.key)}'
 
     return RouterStatusEntryV3.create(attr)
 
@@ -1024,21 +1039,30 @@ class BridgeDescriptor(ServerDescriptor):
   @classmethod
   def content(cls, attr = None, exclude = (), sign = False):
     if sign:
-      raise NotImplementedError('Signing of %s not implemented' % cls.__name__)
+      raise NotImplementedError(f'Signing of {cls.__name__} not implemented')
 
-    return _descriptor_content(attr, exclude, (
-      ('router', '%s %s 9001 0 0' % (_random_nickname(), _random_ipv4_address())),
-      ('router-digest', '006FD96BA35E7785A6A3B8B75FE2E2435A13BDB4'),
-      ('published', _random_date()),
-      ('bandwidth', '409600 819200 5120'),
-      ('reject', '*:*'),
-    ))
+    return _descriptor_content(
+        attr,
+        exclude,
+        (
+            (
+                'router',
+                f'{_random_nickname()} {_random_ipv4_address()} 9001 0 0',
+            ),
+            ('router-digest', '006FD96BA35E7785A6A3B8B75FE2E2435A13BDB4'),
+            ('published', _random_date()),
+            ('bandwidth', '409600 819200 5120'),
+            ('reject', '*:*'),
+        ),
+    )
 
   def digest(self, hash_type = DigestHash.SHA1, encoding = DigestEncoding.HEX):
     if hash_type == DigestHash.SHA1 and encoding == DigestEncoding.HEX:
       return self._digest
     else:
-      raise NotImplementedError('Bridge server descriptor digests are only available as sha1/hex, not %s/%s' % (hash_type, encoding))
+      raise NotImplementedError(
+          f'Bridge server descriptor digests are only available as sha1/hex, not {hash_type}/{encoding}'
+      )
 
   def is_scrubbed(self):
     """
@@ -1079,11 +1103,14 @@ class BridgeDescriptor(ServerDescriptor):
 
     for line in self.get_unrecognized_lines():
       if line.startswith('onion-key '):
-        issues.append('Bridge descriptors should have their onion-key scrubbed: %s' % line)
+        issues.append(
+            f'Bridge descriptors should have their onion-key scrubbed: {line}')
       elif line.startswith('signing-key '):
-        issues.append('Bridge descriptors should have their signing-key scrubbed: %s' % line)
+        issues.append(
+            f'Bridge descriptors should have their signing-key scrubbed: {line}')
       elif line.startswith('router-signature '):
-        issues.append('Bridge descriptors should have their signature scrubbed: %s' % line)
+        issues.append(
+            f'Bridge descriptors should have their signature scrubbed: {line}')
 
     return issues
 

@@ -82,9 +82,8 @@ def _parse_file(document_file, validate, entry_class, entry_keyword = 'r', start
   # check if we're starting at the end of the section (ie, there's no entries to read)
   if section_end_keywords:
     first_keyword = None
-    line_match = KEYWORD_LINE.match(stem.util.str_tools._to_unicode(document_file.readline()))
-
-    if line_match:
+    if line_match := KEYWORD_LINE.match(
+        stem.util.str_tools._to_unicode(document_file.readline())):
       first_keyword = line_match.groups()[0]
 
     document_file.seek(start_position)
@@ -101,9 +100,7 @@ def _parse_file(document_file, validate, entry_class, entry_keyword = 'r', start
       include_ending_keyword = True
     )
 
-    desc_content = bytes.join(b'', desc_lines)
-
-    if desc_content:
+    if desc_content := bytes.join(b'', desc_lines):
       yield entry_class(desc_content, validate, *extra_args)
 
       # check if we stopped at the end of the section
@@ -144,9 +141,9 @@ def _parse_r_line(descriptor, entries):
   elif not stem.util.connection.is_valid_ipv4_address(r_comp[5]):
     raise ValueError("%s address isn't a valid IPv4 address: %s" % (descriptor._name(), r_comp[5]))
   elif not stem.util.connection.is_valid_port(r_comp[6]):
-    raise ValueError('%s ORPort is invalid: %s' % (descriptor._name(), r_comp[6]))
+    raise ValueError(f'{descriptor._name()} ORPort is invalid: {r_comp[6]}')
   elif not stem.util.connection.is_valid_port(r_comp[7], allow_zero = True):
-    raise ValueError('%s DirPort is invalid: %s' % (descriptor._name(), r_comp[7]))
+    raise ValueError(f'{descriptor._name()} DirPort is invalid: {r_comp[7]}')
 
   descriptor.nickname = r_comp[0]
   descriptor.fingerprint = _base64_to_hex(r_comp[1])
@@ -159,7 +156,7 @@ def _parse_r_line(descriptor, entries):
   descriptor.dir_port = None if r_comp[7] == '0' else int(r_comp[7])
 
   try:
-    published = '%s %s' % (r_comp[3], r_comp[4])
+    published = f'{r_comp[3]} {r_comp[4]}'
     descriptor.published = stem.util.str_tools._parse_timestamp(published)
   except ValueError:
     raise ValueError("Publication time time wasn't parsable: r %s" % value)
@@ -198,7 +195,7 @@ def _parse_s_line(descriptor, entries):
 
   for flag in flags:
     if flags.count(flag) > 1:
-      raise ValueError('%s had duplicate flags: s %s' % (descriptor._name(), value))
+      raise ValueError(f'{descriptor._name()} had duplicate flags: s {value}')
     elif flag == '':
       raise ValueError("%s had extra whitespace on its 's' line: s %s" % (descriptor._name(), value))
 
@@ -218,7 +215,9 @@ def _parse_v_line(descriptor, entries):
     try:
       descriptor.version = stem.version._get_version(value[4:])
     except ValueError as exc:
-      raise ValueError('%s has a malformed tor version (%s): v %s' % (descriptor._name(), exc, value))
+      raise ValueError(
+          f'{descriptor._name()} has a malformed tor version ({exc}): v {value}'
+      )
 
 
 def _parse_w_line(descriptor, entries):
@@ -239,11 +238,7 @@ def _parse_w_line(descriptor, entries):
   unrecognized_bandwidth_entries = []
 
   for w_entry in w_comp:
-    if '=' in w_entry:
-      w_key, w_value = w_entry.split('=', 1)
-    else:
-      w_key, w_value = w_entry, None
-
+    w_key, w_value = w_entry.split('=', 1) if '=' in w_entry else (w_entry, None)
     if w_key == 'Bandwidth':
       if not (w_value and w_value.isdigit()):
         raise ValueError("%s 'Bandwidth=' entry needs to have a numeric value: w %s" % (descriptor._name(), value))
@@ -281,30 +276,21 @@ def _parse_p_line(descriptor, entries):
   try:
     descriptor.exit_policy = stem.exit_policy.MicroExitPolicy(value)
   except ValueError as exc:
-    raise ValueError('%s exit policy is malformed (%s): p %s' % (descriptor._name(), exc, value))
+    raise ValueError(
+        f'{descriptor._name()} exit policy is malformed ({exc}): p {value}')
 
 
 def _parse_id_line(descriptor, entries):
-  # "id" "ed25519" ed25519-identity
-  #
-  # examples:
-  #
-  #   id ed25519 none
-  #   id ed25519 8RH34kO07Pp+XYwzdoATVyCibIvmbslUjRkAm7J4IA8
-
-  value = _value('id', entries)
-
-  if value:
+  if value := _value('id', entries):
     if descriptor.document and not descriptor.document.is_vote:
       raise ValueError("%s 'id' line should only appear in votes: id %s" % (descriptor._name(), value))
 
     value_comp = value.split()
 
-    if len(value_comp) >= 2:
-      descriptor.identifier_type = value_comp[0]
-      descriptor.identifier = value_comp[1]
-    else:
+    if len(value_comp) < 2:
       raise ValueError("'id' lines should contain both the key type and digest: id %s" % value)
+    descriptor.identifier_type = value_comp[0]
+    descriptor.identifier = value_comp[1]
 
 
 def _parse_m_line(descriptor, entries):
@@ -325,7 +311,9 @@ def _parse_m_line(descriptor, entries):
     try:
       methods = [int(entry) for entry in m_comp[0].split(',')]
     except ValueError:
-      raise ValueError('%s microdescriptor methods should be a series of comma separated integers: m %s' % (descriptor._name(), value))
+      raise ValueError(
+          f'{descriptor._name()} microdescriptor methods should be a series of comma separated integers: m {value}'
+      )
 
     hashes = {}
 
@@ -383,9 +371,9 @@ def _base64_to_hex(identity, check_if_fingerprint = True):
   if stem.prereq.is_python_3():
     fingerprint = stem.util.str_tools._to_unicode(fingerprint)
 
-  if check_if_fingerprint:
-    if not stem.util.tor_tools.is_valid_fingerprint(fingerprint):
-      raise ValueError("Decoded '%s' to be '%s', which isn't a valid fingerprint" % (identity, fingerprint))
+  if check_if_fingerprint and not stem.util.tor_tools.is_valid_fingerprint(
+      fingerprint):
+    raise ValueError("Decoded '%s' to be '%s', which isn't a valid fingerprint" % (identity, fingerprint))
 
   return fingerprint
 
@@ -477,7 +465,7 @@ class RouterStatusEntry(Descriptor):
         if keyword in entries and len(entries[keyword]) > 1:
           raise ValueError("%s can only have a single '%s' line, got %i:\n%s" % (self._name(True), keyword, len(entries[keyword]), str(self)))
 
-      if 'r' != list(entries.keys())[0]:
+      if list(entries.keys())[0] != 'r':
         raise ValueError("%s are expected to start with a 'r' line:\n%s" % (self._name(True), str(self)))
 
       self._parse(entries, validate)
@@ -526,11 +514,16 @@ class RouterStatusEntryV2(RouterStatusEntry):
   @classmethod
   def content(cls, attr = None, exclude = (), sign = False):
     if sign:
-      raise NotImplementedError('Signing of %s not implemented' % cls.__name__)
+      raise NotImplementedError(f'Signing of {cls.__name__} not implemented')
 
-    return _descriptor_content(attr, exclude, (
-      ('r', '%s p1aag7VwarGxqctS7/fS0y5FU+s oQZFLYe9e4A7bOkWKR7TaNxb0JE %s %s 9001 0' % (_random_nickname(), _random_date(), _random_ipv4_address())),
-    ))
+    return _descriptor_content(
+        attr,
+        exclude,
+        ((
+            'r',
+            f'{_random_nickname()} p1aag7VwarGxqctS7/fS0y5FU+s oQZFLYe9e4A7bOkWKR7TaNxb0JE {_random_date()} {_random_ipv4_address()} 9001 0',
+        ), ),
+    )
 
   def _name(self, is_plural = False):
     return 'Router status entries (v2)' if is_plural else 'Router status entry (v2)'
@@ -620,12 +613,19 @@ class RouterStatusEntryV3(RouterStatusEntry):
   @classmethod
   def content(cls, attr = None, exclude = (), sign = False):
     if sign:
-      raise NotImplementedError('Signing of %s not implemented' % cls.__name__)
+      raise NotImplementedError(f'Signing of {cls.__name__} not implemented')
 
-    return _descriptor_content(attr, exclude, (
-      ('r', '%s p1aag7VwarGxqctS7/fS0y5FU+s oQZFLYe9e4A7bOkWKR7TaNxb0JE %s %s 9001 0' % (_random_nickname(), _random_date(), _random_ipv4_address())),
-      ('s', 'Fast Named Running Stable Valid'),
-    ))
+    return _descriptor_content(
+        attr,
+        exclude,
+        (
+            (
+                'r',
+                f'{_random_nickname()} p1aag7VwarGxqctS7/fS0y5FU+s oQZFLYe9e4A7bOkWKR7TaNxb0JE {_random_date()} {_random_ipv4_address()} 9001 0',
+            ),
+            ('s', 'Fast Named Running Stable Valid'),
+        ),
+    )
 
   def _name(self, is_plural = False):
     return 'Router status entries (v3)' if is_plural else 'Router status entry (v3)'
@@ -693,13 +693,20 @@ class RouterStatusEntryMicroV3(RouterStatusEntry):
   @classmethod
   def content(cls, attr = None, exclude = (), sign = False):
     if sign:
-      raise NotImplementedError('Signing of %s not implemented' % cls.__name__)
+      raise NotImplementedError(f'Signing of {cls.__name__} not implemented')
 
-    return _descriptor_content(attr, exclude, (
-      ('r', '%s ARIJF2zbqirB9IwsW0mQznccWww %s %s 9001 9030' % (_random_nickname(), _random_date(), _random_ipv4_address())),
-      ('m', 'aiUklwBrua82obG5AsTX+iEpkjQA2+AQHxZ7GwMfY70'),
-      ('s', 'Fast Guard HSDir Named Running Stable V2Dir Valid'),
-    ))
+    return _descriptor_content(
+        attr,
+        exclude,
+        (
+            (
+                'r',
+                f'{_random_nickname()} ARIJF2zbqirB9IwsW0mQznccWww {_random_date()} {_random_ipv4_address()} 9001 9030',
+            ),
+            ('m', 'aiUklwBrua82obG5AsTX+iEpkjQA2+AQHxZ7GwMfY70'),
+            ('s', 'Fast Guard HSDir Named Running Stable V2Dir Valid'),
+        ),
+    )
 
   def _name(self, is_plural = False):
     return 'Router status entries (micro v3)' if is_plural else 'Router status entry (micro v3)'

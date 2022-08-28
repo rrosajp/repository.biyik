@@ -30,12 +30,12 @@ class factory(object):
     def __init__(self, module=None):
         self.os = self.detect_os()
         utils.module = module
-        utils.log("Detected OS : %s" % self.os)
+        utils.log(f"Detected OS : {self.os}")
         self.toolchains = self.detect_tc()
         self.architecture = self.detect_ar()
-        utils.log("Detected Architecture : %s" % self.architecture)
+        utils.log(f"Detected Architecture : {self.architecture}")
         self.python = self.detect_py()
-        utils.log("Detected Python Interpreter : %s" % self.python)
+        utils.log(f"Detected Python Interpreter : {self.python}")
         self.module = module
 
     def detect_os(self):
@@ -57,9 +57,7 @@ class factory(object):
         ar = platform.architecture()[0].lower()
         mach = platform.machine().lower()
         if ar == "32bit":
-            if "armv7l" in mach:
-                return defs.AR_AR7
-            return defs.AR_X86
+            return defs.AR_AR7 if "armv7l" in mach else defs.AR_X86
         if ar == "64bit":
             return defs.AR_X64
         # to-do: detect arms
@@ -68,23 +66,16 @@ class factory(object):
         ucs2 = sys.maxunicode <= 65535
         version = platform.python_version()
         if version.startswith("2.7."):
-            if ucs2:
-                return defs.PY_CP27M
-            else:
-                return defs.PY_CP27MU
+            return defs.PY_CP27M if ucs2 else defs.PY_CP27MU
         if version.startswith("2.6."):
-            if ucs2:
-                return defs.PY_CP26M
-            else:
-                return defs.PY_CP26MU
+            return defs.PY_CP26M if ucs2 else defs.PY_CP26MU
 
     def detect_tc(self):
         tc = None
         if self.os == defs.OS_WIN:
             tcs = ["winabi"]
-            msc = re.search("MSC v\.([0-9]{4})", sys.version)
-            if msc:
-                msc = int(msc.group(1))
+            if msc := re.search("MSC v\.([0-9]{4})", sys.version):
+                msc = int(msc[1])
                 msc = defs.msc_info[msc][1]
                 tc = "vc%d" % msc
             if tc:
@@ -96,4 +87,4 @@ class factory(object):
         if self.os == defs.OS_AND:
             # to do: dont know much about android ndk
             return ["ndk"]
-        raise OSError("Toolchain %s:%s is not supported" % (defs.os, sys.version))
+        raise OSError(f"Toolchain {defs.os}:{sys.version} is not supported")

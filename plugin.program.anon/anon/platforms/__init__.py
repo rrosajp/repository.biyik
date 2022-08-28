@@ -31,7 +31,7 @@ class Base(object):
         self.init(*args, **kwargs)
         for k, v in self.cfg.iteritems():
             data = self.stack.find(k).data
-            if not data == {}:
+            if data != {}:
                 self.cfg[k] = data
         for k, v in defs.defconfig.iteritems():
             data = self.stack.find(k).data
@@ -56,18 +56,13 @@ class Base(object):
                 return []
             else:
                 return
-        if stdout:
-            return iter(popen.stdout.readline, b"")
-        else:
-            return popen
+        return iter(popen.stdout.readline, b"") if stdout else popen
 
     def default_if_gw(self):
         raise Exception
-        return "?", "?"
 
     def if_ip_subnet(self, dev):
         raise Exception
-        return "?", "?"
 
     def config(self, key, value):
         self.stack.throw(key, value)
@@ -80,10 +75,7 @@ class Base(object):
             data = self.cfg[key]
         if data == "auto":
             _, dev = self.default_if_gw()
-            if dev:
-                data = dev
-            else:
-                data = "?"
+            data = dev or "?"
         return data
 
     def setsetting(self, key, value):

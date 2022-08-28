@@ -71,15 +71,14 @@ def _get_fingerprint(arg, controller):
     else:
       address, port = arg, None
 
-    matches = {}
+    matches = {
+        desc.or_port: desc.fingerprint
+        for desc in controller.get_network_statuses()
+        if desc.address == address and (not port or desc.or_port == port)
+    }
 
-    for desc in controller.get_network_statuses():
-      if desc.address == address:
-        if not port or desc.or_port == port:
-          matches[desc.or_port] = desc.fingerprint
-
-    if len(matches) == 0:
-      raise ValueError('No relays found at %s' % arg)
+    if not matches:
+      raise ValueError(f'No relays found at {arg}')
     elif len(matches) == 1:
       return list(matches.values())[0]
     else:
@@ -144,9 +143,7 @@ class ControlInterpreter(code.InteractiveConsole):
 
   def get_events(self, *event_types):
     events = list(self._received_events)
-    event_types = list(map(str.upper, event_types))  # make filtering case insensitive
-
-    if event_types:
+    if event_types := list(map(str.upper, event_types)):
       events = [e for e in events if e.type in event_types]
 
     return events
@@ -199,7 +196,10 @@ class ControlInterpreter(code.InteractiveConsole):
     # being optional.
 
     if not ns_desc:
-      return format('Unable to find consensus information for %s' % fingerprint, *ERROR_OUTPUT)
+      return format(
+          f'Unable to find consensus information for {fingerprint}',
+          *ERROR_OUTPUT,
+      )
 
     # More likely than not we'll have the microdescriptor but not server and
     # extrainfo descriptors. If so then fetching them.
@@ -222,11 +222,13 @@ class ControlInterpreter(code.InteractiveConsole):
       pass
 
     try:
-      address_extrainfo.append(self._controller.get_info('ip-to-country/%s' % ns_desc.address))
+      address_extrainfo.append(
+          self._controller.get_info(f'ip-to-country/{ns_desc.address}'))
     except:
       pass
 
-    address_extrainfo_label = ' (%s)' % ', '.join(address_extrainfo) if address_extrainfo else ''
+    address_extrainfo_label = (f" ({', '.join(address_extrainfo)})"
+                               if address_extrainfo else '')
 
     if server_desc:
       exit_policy_label = str(server_desc.exit_policy)
@@ -236,8 +238,9 @@ class ControlInterpreter(code.InteractiveConsole):
       exit_policy_label = 'Unknown'
 
     lines = [
-      '%s (%s)' % (ns_desc.nickname, fingerprint),
-      format('address: ', *BOLD_OUTPUT) + '%s:%s%s' % (ns_desc.address, ns_desc.or_port, address_extrainfo_label),
+        f'{ns_desc.nickname} ({fingerprint})',
+        format('address: ', *BOLD_OUTPUT) +
+        f'{ns_desc.address}:{ns_desc.or_port}{address_extrainfo_label}',
     ]
 
     if server_desc:
@@ -283,7 +286,7 @@ class ControlInterpreter(code.InteractiveConsole):
 
     if not arg:
       status = 'enabled' if self._run_python_commands else 'disabled'
-      return format('Python support is currently %s.' % status, *STANDARD_OUTPUT)
+      return format(f'Python support is currently {status}.', *STANDARD_OUTPUT)
     elif arg.lower() == 'enable':
       self._run_python_commands = True
     elif arg.lower() == 'disable':

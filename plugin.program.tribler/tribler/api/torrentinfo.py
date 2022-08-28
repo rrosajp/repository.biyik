@@ -19,10 +19,9 @@ class torrentinfo:
         if hops:
             kwargs["hops"] = hops
         resp = common.call("GET", "torrentinfo", **kwargs)
-        if resp and resp.get("metainfo"):
-            metainfo = json.loads(resp["metainfo"].decode("hex"))
-            metainfo["info"]["pieces"] = metainfo["info"]["pieces"].decode("hex")
-            metainfo["infohash"] = hashlib.sha1(bencode.encode(metainfo['info'])).digest().encode("hex")
-            return metainfo
-        else:
+        if not resp or not resp.get("metainfo"):
             return resp
+        metainfo = json.loads(resp["metainfo"].decode("hex"))
+        metainfo["info"]["pieces"] = metainfo["info"]["pieces"].decode("hex")
+        metainfo["infohash"] = hashlib.sha1(bencode.encode(metainfo['info'])).digest().encode("hex")
+        return metainfo

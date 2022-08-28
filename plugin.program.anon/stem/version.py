@@ -116,7 +116,7 @@ def get_system_tor_version(tor_cmd = 'tor'):
   """
 
   if tor_cmd not in VERSION_CACHE:
-    version_cmd = '%s --version' % tor_cmd
+    version_cmd = f'{tor_cmd} --version'
 
     try:
       version_output = stem.util.system.call(version_cmd)
@@ -144,8 +144,8 @@ def get_system_tor_version(tor_cmd = 'tor'):
         except ValueError as exc:
           raise IOError(exc)
 
-    if tor_cmd not in VERSION_CACHE:
-      raise IOError("'%s' didn't provide a parseable version:\n\n%s" % (version_cmd, '\n'.join(version_output)))
+  if tor_cmd not in VERSION_CACHE:
+    raise IOError("'%s' didn't provide a parseable version:\n\n%s" % (version_cmd, '\n'.join(version_output)))
 
   return VERSION_CACHE[tor_cmd]
 
@@ -182,35 +182,32 @@ class Version(object):
 
   def __init__(self, version_str):
     self.version_str = version_str
-    version_parts = VERSION_PATTERN.match(version_str)
-
-    if version_parts:
-      major, minor, micro, patch, status, extra_str, _ = version_parts.groups()
-
-      # The patch and status matches are optional (may be None) and have an extra
-      # proceeding period or dash if they exist. Stripping those off.
-
-      if patch:
-        patch = int(patch[1:])
-
-      if status:
-        status = status[1:]
-
-      self.major = int(major)
-      self.minor = int(minor)
-      self.micro = int(micro)
-      self.patch = patch
-      self.status = status
-      self.all_extra = [entry[1:-1] for entry in extra_str.strip().split()] if extra_str else []
-      self.extra = self.all_extra[0] if self.all_extra else None
-      self.git_commit = None
-
-      for extra in self.all_extra:
-        if extra and re.match('^git-[0-9a-f]{16}$', extra):
-          self.git_commit = extra[4:]
-          break
-    else:
+    if not (version_parts := VERSION_PATTERN.match(version_str)):
       raise ValueError("'%s' isn't a properly formatted tor version" % version_str)
+    major, minor, micro, patch, status, extra_str, _ = version_parts.groups()
+
+    # The patch and status matches are optional (may be None) and have an extra
+    # proceeding period or dash if they exist. Stripping those off.
+
+    if patch:
+      patch = int(patch[1:])
+
+    if status:
+      status = status[1:]
+
+    self.major = int(major)
+    self.minor = int(minor)
+    self.micro = int(micro)
+    self.patch = patch
+    self.status = status
+    self.all_extra = [entry[1:-1] for entry in extra_str.strip().split()] if extra_str else []
+    self.extra = self.all_extra[0] if self.all_extra else None
+    self.git_commit = None
+
+    for extra in self.all_extra:
+      if extra and re.match('^git-[0-9a-f]{16}$', extra):
+        self.git_commit = extra[4:]
+        break
 
   def __str__(self):
     """
@@ -245,8 +242,8 @@ class Version(object):
     #   If we *do* encounter two versions that differ only by status tag, we
     #   compare them lexically as ASCII byte strings.
 
-    my_status = self.status if self.status else ''
-    other_status = other.status if other.status else ''
+    my_status = self.status or ''
+    other_status = other.status or ''
 
     return method(my_status, other_status)
 
@@ -267,22 +264,12 @@ class Version(object):
     """
 
     if isinstance(other, _VersionRequirements):
-      for rule in other.rules:
-        if rule(self):
-          return True
-
-      return False
-
+      return any(rule(self) for rule in other.rules)
     return self._compare(other, lambda s, o: s > o)
 
   def __ge__(self, other):
     if isinstance(other, _VersionRequirements):
-      for rule in other.rules:
-        if rule(self):
-          return True
-
-      return False
-
+      return any(rule(self) for rule in other.rules)
     return self._compare(other, lambda s, o: s >= o)
 
 

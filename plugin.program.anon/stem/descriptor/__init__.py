@@ -89,6 +89,7 @@ Package for parsing and processing descriptor data.
   =================== ===========
 """
 
+
 import base64
 import codecs
 import collections
@@ -140,9 +141,10 @@ File object isn't seekable. Try using Descriptor.from_str() instead:
 
 KEYWORD_CHAR = 'a-zA-Z0-9-'
 WHITESPACE = ' \t'
-KEYWORD_LINE = re.compile('^([%s]+)(?:[%s]+(.*))?$' % (KEYWORD_CHAR, WHITESPACE))
+KEYWORD_LINE = re.compile(f'^([{KEYWORD_CHAR}]+)(?:[{WHITESPACE}]+(.*))?$')
 SPECIFIC_KEYWORD_LINE = '^(%%s)(?:[%s]+(.*))?$' % WHITESPACE
-PGP_BLOCK_START = re.compile('^-----BEGIN ([%s%s]+)-----$' % (KEYWORD_CHAR, WHITESPACE))
+PGP_BLOCK_START = re.compile(
+    f'^-----BEGIN ([{KEYWORD_CHAR}{WHITESPACE}]+)-----$')
 PGP_BLOCK_END = '-----END %s-----'
 EMPTY_COLLECTION = ([], {}, set())
 
@@ -235,7 +237,7 @@ class _Compression(object):
     try:
       return self._decompression_func(self._module, content)
     except Exception as exc:
-      raise IOError('Failed to decompress as %s: %s' % (self, exc))
+      raise IOError(f'Failed to decompress as {self}: {exc}')
 
   def __str__(self):
     return self._name
@@ -274,7 +276,7 @@ class TypeAnnotation(collections.namedtuple('TypeAnnotation', ['name', 'major_ve
   """
 
   def __str__(self):
-    return '@type %s %s.%s' % (self.name, self.major_version, self.minor_version)
+    return f'@type {self.name} {self.major_version}.{self.minor_version}'
 
 
 class SigningKey(collections.namedtuple('SigningKey', ['private', 'public', 'public_digest'])):
@@ -372,9 +374,8 @@ def parse_file(descriptor_file, descriptor_type = None, validate = False, docume
     handler = _parse_file_for_tarfile
 
   if handler:
-    for desc in handler(descriptor_file, descriptor_type, validate, document_handler, **kwargs):
-      yield desc
-
+    yield from handler(descriptor_file, descriptor_type, validate,
+                       document_handler, **kwargs)
     return
 
   # Not all files are seekable. If unseekable then advising the user.
@@ -426,11 +427,11 @@ def parse_file(descriptor_file, descriptor_type = None, validate = False, docume
       if normalize_newlines is None and stem.util.system.is_windows():
         descriptor_file = NewlineNormalizer(descriptor_file)
 
-      if filename == 'cached-descriptors' or filename == 'cached-descriptors.new':
+      if filename in ['cached-descriptors', 'cached-descriptors.new']:
         return stem.descriptor.server_descriptor._parse_file(descriptor_file, validate = validate, **kwargs)
-      elif filename == 'cached-extrainfo' or filename == 'cached-extrainfo.new':
+      elif filename in ['cached-extrainfo', 'cached-extrainfo.new']:
         return stem.descriptor.extrainfo_descriptor._parse_file(descriptor_file, validate = validate, **kwargs)
-      elif filename == 'cached-microdescs' or filename == 'cached-microdescs.new':
+      elif filename in ['cached-microdescs', 'cached-microdescs.new']:
         return stem.descriptor.microdescriptor._parse_file(descriptor_file, validate = validate, **kwargs)
       elif filename == 'cached-consensus':
         return stem.descriptor.networkstatus._parse_file(descriptor_file, validate = validate, document_handler = document_handler, **kwargs)
@@ -448,8 +449,7 @@ def parse_file(descriptor_file, descriptor_type = None, validate = False, docume
 
 def _parse_file_for_path(descriptor_file, *args, **kwargs):
   with open(descriptor_file, 'rb') as desc_file:
-    for desc in parse_file(desc_file, *args, **kwargs):
-      yield desc
+    yield from parse_file(desc_file, *args, **kwargs)
 
 
 def _parse_file_for_tar_path(descriptor_file, *args, **kwargs):
@@ -486,67 +486,88 @@ def _parse_metrics_file(descriptor_type, major_version, minor_version, descripto
   # throws a TypeError if the descriptor_type or version isn't recognized.
 
   if descriptor_type == stem.descriptor.server_descriptor.RelayDescriptor.TYPE_ANNOTATION_NAME and major_version == 1:
-    for desc in stem.descriptor.server_descriptor._parse_file(descriptor_file, is_bridge = False, validate = validate, **kwargs):
-      yield desc
+    yield from stem.descriptor.server_descriptor._parse_file(
+        descriptor_file, is_bridge=False, validate=validate, **kwargs)
   elif descriptor_type == stem.descriptor.server_descriptor.BridgeDescriptor.TYPE_ANNOTATION_NAME and major_version == 1:
-    for desc in stem.descriptor.server_descriptor._parse_file(descriptor_file, is_bridge = True, validate = validate, **kwargs):
-      yield desc
+    yield from stem.descriptor.server_descriptor._parse_file(
+        descriptor_file, is_bridge=True, validate=validate, **kwargs)
   elif descriptor_type == stem.descriptor.extrainfo_descriptor.RelayExtraInfoDescriptor.TYPE_ANNOTATION_NAME and major_version == 1:
-    for desc in stem.descriptor.extrainfo_descriptor._parse_file(descriptor_file, is_bridge = False, validate = validate, **kwargs):
-      yield desc
+    yield from stem.descriptor.extrainfo_descriptor._parse_file(
+        descriptor_file, is_bridge=False, validate=validate, **kwargs)
   elif descriptor_type == stem.descriptor.microdescriptor.Microdescriptor.TYPE_ANNOTATION_NAME and major_version == 1:
-    for desc in stem.descriptor.microdescriptor._parse_file(descriptor_file, validate = validate, **kwargs):
-      yield desc
+    yield from stem.descriptor.microdescriptor._parse_file(
+        descriptor_file, validate=validate, **kwargs)
   elif descriptor_type == stem.descriptor.extrainfo_descriptor.BridgeExtraInfoDescriptor.TYPE_ANNOTATION_NAME and major_version == 1:
     # version 1.1 introduced a 'transport' field...
     # https://trac.torproject.org/6257
 
-    for desc in stem.descriptor.extrainfo_descriptor._parse_file(descriptor_file, is_bridge = True, validate = validate, **kwargs):
-      yield desc
+    yield from stem.descriptor.extrainfo_descriptor._parse_file(
+        descriptor_file, is_bridge=True, validate=validate, **kwargs)
   elif descriptor_type == stem.descriptor.networkstatus.NetworkStatusDocumentV2.TYPE_ANNOTATION_NAME and major_version == 1:
     document_type = stem.descriptor.networkstatus.NetworkStatusDocumentV2
 
-    for desc in stem.descriptor.networkstatus._parse_file(descriptor_file, document_type, validate = validate, document_handler = document_handler, **kwargs):
-      yield desc
+    yield from stem.descriptor.networkstatus._parse_file(
+        descriptor_file,
+        document_type,
+        validate=validate,
+        document_handler=document_handler,
+        **kwargs)
   elif descriptor_type == stem.descriptor.networkstatus.KeyCertificate.TYPE_ANNOTATION_NAME and major_version == 1:
-    for desc in stem.descriptor.networkstatus._parse_file_key_certs(descriptor_file, validate = validate, **kwargs):
-      yield desc
+    yield from stem.descriptor.networkstatus._parse_file_key_certs(
+        descriptor_file, validate=validate, **kwargs)
   elif descriptor_type in ('network-status-consensus-3', 'network-status-vote-3') and major_version == 1:
     document_type = stem.descriptor.networkstatus.NetworkStatusDocumentV3
 
-    for desc in stem.descriptor.networkstatus._parse_file(descriptor_file, document_type, validate = validate, document_handler = document_handler, **kwargs):
-      yield desc
+    yield from stem.descriptor.networkstatus._parse_file(
+        descriptor_file,
+        document_type,
+        validate=validate,
+        document_handler=document_handler,
+        **kwargs)
   elif descriptor_type == 'network-status-microdesc-consensus-3' and major_version == 1:
     document_type = stem.descriptor.networkstatus.NetworkStatusDocumentV3
 
-    for desc in stem.descriptor.networkstatus._parse_file(descriptor_file, document_type, is_microdescriptor = True, validate = validate, document_handler = document_handler, **kwargs):
-      yield desc
+    yield from stem.descriptor.networkstatus._parse_file(
+        descriptor_file,
+        document_type,
+        is_microdescriptor=True,
+        validate=validate,
+        document_handler=document_handler,
+        **kwargs)
   elif descriptor_type == stem.descriptor.networkstatus.BridgeNetworkStatusDocument.TYPE_ANNOTATION_NAME and major_version == 1:
     document_type = stem.descriptor.networkstatus.BridgeNetworkStatusDocument
 
-    for desc in stem.descriptor.networkstatus._parse_file(descriptor_file, document_type, validate = validate, document_handler = document_handler, **kwargs):
-      yield desc
+    yield from stem.descriptor.networkstatus._parse_file(
+        descriptor_file,
+        document_type,
+        validate=validate,
+        document_handler=document_handler,
+        **kwargs)
   elif descriptor_type == stem.descriptor.networkstatus.DetachedSignature.TYPE_ANNOTATION_NAME and major_version == 1:
     document_type = stem.descriptor.networkstatus.DetachedSignature
 
-    for desc in stem.descriptor.networkstatus._parse_file(descriptor_file, document_type, validate = validate, document_handler = document_handler, **kwargs):
-      yield desc
+    yield from stem.descriptor.networkstatus._parse_file(
+        descriptor_file,
+        document_type,
+        validate=validate,
+        document_handler=document_handler,
+        **kwargs)
   elif descriptor_type == stem.descriptor.tordnsel.TorDNSEL.TYPE_ANNOTATION_NAME and major_version == 1:
-    for desc in stem.descriptor.tordnsel._parse_file(descriptor_file, validate = validate, **kwargs):
-      yield desc
+    yield from stem.descriptor.tordnsel._parse_file(
+        descriptor_file, validate=validate, **kwargs)
   elif descriptor_type == stem.descriptor.hidden_service.HiddenServiceDescriptorV2.TYPE_ANNOTATION_NAME and major_version == 1:
     desc_type = stem.descriptor.hidden_service.HiddenServiceDescriptorV2
 
-    for desc in stem.descriptor.hidden_service._parse_file(descriptor_file, desc_type, validate = validate, **kwargs):
-      yield desc
+    yield from stem.descriptor.hidden_service._parse_file(
+        descriptor_file, desc_type, validate=validate, **kwargs)
   elif descriptor_type == stem.descriptor.hidden_service.HiddenServiceDescriptorV3.TYPE_ANNOTATION_NAME and major_version == 1:
     desc_type = stem.descriptor.hidden_service.HiddenServiceDescriptorV3
 
-    for desc in stem.descriptor.hidden_service._parse_file(descriptor_file, desc_type, validate = validate, **kwargs):
-      yield desc
+    yield from stem.descriptor.hidden_service._parse_file(
+        descriptor_file, desc_type, validate=validate, **kwargs)
   elif descriptor_type == stem.descriptor.bandwidth_file.BandwidthFile.TYPE_ANNOTATION_NAME and major_version == 1:
-    for desc in stem.descriptor.bandwidth_file._parse_file(descriptor_file, validate = validate, **kwargs):
-      yield desc
+    yield from stem.descriptor.bandwidth_file._parse_file(
+        descriptor_file, validate=validate, **kwargs)
   else:
     raise TypeError("Unrecognized metrics descriptor format. type: '%s', version: '%i.%i'" % (descriptor_type, major_version, minor_version))
 
@@ -603,22 +624,22 @@ def _descriptor_content(attr = None, exclude = (), header_template = (), footer_
         continue
       elif isinstance(value, (tuple, list)):
         for v in value:
-          content.append('%s %s' % (keyword, v))
+          content.append(f'{keyword} {v}')
       elif value == '':
         content.append(keyword)
       elif value.startswith('\n'):
         # some values like crypto follow the line instead
-        content.append('%s%s' % (keyword, value))
+        content.append(f'{keyword}{value}')
       else:
-        content.append('%s %s' % (keyword, value))
+        content.append(f'{keyword} {value}')
 
   remainder = []
 
   for k, v in attr.items():
     if isinstance(v, (tuple, list)):
-      remainder += ['%s %s' % (k, entry) for entry in v]
+      remainder += [f'{k} {entry}' for entry in v]
     else:
-      remainder.append('%s %s' % (k, v))
+      remainder.append(f'{k} {v}')
 
   return stem.util.str_tools._to_bytes('\n'.join(header_content + remainder + footer_content))
 
@@ -645,7 +666,12 @@ def _parse_if_present(keyword, attribute):
 
 def _parse_bytes_line(keyword, attribute):
   def _parse(descriptor, entries):
-    line_match = re.search(stem.util.str_tools._to_bytes('^(opt )?%s(?:[%s]+(.*))?$' % (keyword, WHITESPACE)), descriptor.get_bytes(), re.MULTILINE)
+    line_match = re.search(
+        stem.util.str_tools._to_bytes(
+            f'^(opt )?{keyword}(?:[{WHITESPACE}]+(.*))?$'),
+        descriptor.get_bytes(),
+        re.MULTILINE,
+    )
     result = None
 
     if line_match:
@@ -664,10 +690,10 @@ def _parse_int_line(keyword, attribute, allow_negative = True):
     try:
       int_val = int(value)
     except ValueError:
-      raise ValueError('%s must have a numeric value: %s' % (keyword, value))
+      raise ValueError(f'{keyword} must have a numeric value: {value}')
 
     if not allow_negative and int_val < 0:
-      raise ValueError('%s must have a positive value: %s' % (keyword, value))
+      raise ValueError(f'{keyword} must have a positive value: {value}')
 
     setattr(descriptor, attribute, int_val)
 
@@ -695,7 +721,9 @@ def _parse_forty_character_hex(keyword, attribute):
     value = _value(keyword, entries)
 
     if not stem.util.tor_tools.is_hex_digits(value, 40):
-      raise ValueError('%s line had an invalid value (should be 40 hex characters): %s %s' % (keyword, keyword, value))
+      raise ValueError(
+          f'{keyword} line had an invalid value (should be 40 hex characters): {keyword} {value}'
+      )
 
     setattr(descriptor, attribute, value)
 
@@ -722,7 +750,9 @@ def _parse_protocol_line(keyword, attribute):
           min_value = max_value = entry
 
         if not min_value.isdigit() or not max_value.isdigit():
-          raise ValueError('Protocol values should be a number or number range, but was: %s %s' % (keyword, value))
+          raise ValueError(
+              f'Protocol values should be a number or number range, but was: {keyword} {value}'
+          )
 
         versions += range(int(min_value), int(max_value) + 1)
 
@@ -764,11 +794,8 @@ def _mappings_for(keyword, value, require_value = False, divider = ' '):
   :raises: **ValueError** if descriptor content is invalid
   """
 
-  if value is None:
+  if value is None or value == '':
     return  # no descripoter value to process
-  elif value == '':
-    return  # descriptor field was present, but blank
-
   for entry in value.split(divider):
     if '=' not in entry:
       raise ValueError("'%s' should be a series of 'key=value' pairs but was: %s" % (keyword, value))
@@ -802,9 +829,13 @@ def _encode_digest(hash_value, encoding):
   elif encoding == DigestEncoding.BASE64:
     return stem.util.str_tools._to_unicode(base64.b64encode(hash_value.digest()).rstrip(b'='))
   elif encoding not in DigestEncoding:
-    raise ValueError('Digest encodings should be among our DigestEncoding enumeration (%s), not %s' % (', '.join(DigestEncoding), encoding))
+    raise ValueError(
+        f"Digest encodings should be among our DigestEncoding enumeration ({', '.join(DigestEncoding)}), not {encoding}"
+    )
   else:
-    raise NotImplementedError('BUG: stem.descriptor._encode_digest should recognize all DigestEncoding, lacked %s' % encoding)
+    raise NotImplementedError(
+        f'BUG: stem.descriptor._encode_digest should recognize all DigestEncoding, lacked {encoding}'
+    )
 
 
 class Descriptor(object):
@@ -943,7 +974,8 @@ class Descriptor(object):
     if self.TYPE_ANNOTATION_NAME is not None:
       return TypeAnnotation(self.TYPE_ANNOTATION_NAME, 1, 0)
     else:
-      raise NotImplementedError('%s does not have a @type annotation' % type(self).__name__)
+      raise NotImplementedError(
+          f'{type(self).__name__} does not have a @type annotation')
 
   def get_path(self):
     """
@@ -1014,7 +1046,7 @@ class Descriptor(object):
           parser_for_line[keyword](self, entries)
         else:
           for value, block_type, block_contents in values:
-            line = '%s %s' % (keyword, value)
+            line = f'{keyword} {value}'
 
             if block_contents:
               line += '\n%s' % block_contents
@@ -1260,9 +1292,8 @@ def _read_until_keywords(keywords, descriptor_file, inclusive = False, ignore_fi
     if not line:
       break  # EOF
 
-    line_match = keyword_match.match(stem.util.str_tools._to_unicode(line))
-
-    if line_match:
+    if line_match := keyword_match.match(
+        stem.util.str_tools._to_unicode(line)):
       ending_keyword = line_match.groups()[0]
 
       if not inclusive:
@@ -1274,10 +1305,7 @@ def _read_until_keywords(keywords, descriptor_file, inclusive = False, ignore_fi
     elif content is not None:
       content.append(line)
 
-  if include_ending_keyword:
-    return (content, ending_keyword)
-  else:
-    return content
+  return (content, ending_keyword) if include_ending_keyword else content
 
 
 def _bytes_for_block(content):
@@ -1314,24 +1342,21 @@ def _get_pseudo_pgp_block(remaining_contents):
   if not remaining_contents:
     return None  # nothing left
 
-  block_match = PGP_BLOCK_START.match(remaining_contents[0])
-
-  if block_match:
-    block_type = block_match.groups()[0]
-    block_lines = []
-    end_line = PGP_BLOCK_END % block_type
-
-    while True:
-      if not remaining_contents:
-        raise ValueError("Unterminated pgp style block (looking for '%s'):\n%s" % (end_line, '\n'.join(block_lines)))
-
-      line = remaining_contents.pop(0)
-      block_lines.append(line)
-
-      if line == end_line:
-        return (block_type, '\n'.join(block_lines))
-  else:
+  if not (block_match := PGP_BLOCK_START.match(remaining_contents[0])):
     return None
+  block_type = block_match.groups()[0]
+  block_lines = []
+  end_line = PGP_BLOCK_END % block_type
+
+  while True:
+    if not remaining_contents:
+      raise ValueError("Unterminated pgp style block (looking for '%s'):\n%s" % (end_line, '\n'.join(block_lines)))
+
+    line = remaining_contents.pop(0)
+    block_lines.append(line)
+
+    if line == end_line:
+      return (block_type, '\n'.join(block_lines))
 
 
 def create_signing_key(private_key = None):
@@ -1497,7 +1522,7 @@ def _descriptor_components(raw_contents, validate, extra_keywords = (), non_asci
       if not validate:
         continue
 
-      raise ValueError('Line contains invalid characters: %s' % line)
+      raise ValueError(f'Line contains invalid characters: {line}')
 
     keyword, value = line_match.groups()
 
@@ -1505,9 +1530,7 @@ def _descriptor_components(raw_contents, validate, extra_keywords = (), non_asci
       value = ''
 
     try:
-      block_attr = _get_pseudo_pgp_block(remaining_lines)
-
-      if block_attr:
+      if block_attr := _get_pseudo_pgp_block(remaining_lines):
         block_type, block_contents = block_attr
       else:
         block_type, block_contents = None, None
@@ -1525,14 +1548,11 @@ def _descriptor_components(raw_contents, validate, extra_keywords = (), non_asci
         raise ValueError("'%s' line had non-ascii content: %s" % (keyword, replaced))
 
     if keyword in extra_keywords:
-      extra_entries.append('%s %s' % (keyword, value))
+      extra_entries.append(f'{keyword} {value}')
     else:
       entries.setdefault(keyword, []).append((value, block_type, block_contents))
 
-  if extra_keywords:
-    return entries, extra_entries
-  else:
-    return entries
+  return (entries, extra_entries) if extra_keywords else entries
 
 
 # importing at the end to avoid circular dependencies on our Descriptor class

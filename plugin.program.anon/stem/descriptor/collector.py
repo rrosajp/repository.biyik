@@ -131,8 +131,8 @@ def get_server_descriptors(start = None, end = None, cache_to = None, bridge = F
   on our singleton instance.
   """
 
-  for desc in get_instance().get_server_descriptors(start, end, cache_to, bridge, timeout, retries):
-    yield desc
+  yield from get_instance().get_server_descriptors(start, end, cache_to,
+                                                   bridge, timeout, retries)
 
 
 def get_extrainfo_descriptors(start = None, end = None, cache_to = None, bridge = False, timeout = None, retries = 3):
@@ -142,8 +142,8 @@ def get_extrainfo_descriptors(start = None, end = None, cache_to = None, bridge 
   on our singleton instance.
   """
 
-  for desc in get_instance().get_extrainfo_descriptors(start, end, cache_to, bridge, timeout, retries):
-    yield desc
+  yield from get_instance().get_extrainfo_descriptors(start, end, cache_to,
+                                                      bridge, timeout, retries)
 
 
 def get_microdescriptors(start = None, end = None, cache_to = None, timeout = None, retries = 3):
@@ -153,8 +153,8 @@ def get_microdescriptors(start = None, end = None, cache_to = None, timeout = No
   on our singleton instance.
   """
 
-  for desc in get_instance().get_microdescriptors(start, end, cache_to, timeout, retries):
-    yield desc
+  yield from get_instance().get_microdescriptors(start, end, cache_to, timeout,
+                                                 retries)
 
 
 def get_consensus(start = None, end = None, cache_to = None, document_handler = DocumentHandler.ENTRIES, version = 3, microdescriptor = False, bridge = False, timeout = None, retries = 3):
@@ -164,8 +164,17 @@ def get_consensus(start = None, end = None, cache_to = None, document_handler = 
   on our singleton instance.
   """
 
-  for desc in get_instance().get_consensus(start, end, cache_to, document_handler, version, microdescriptor, bridge, timeout, retries):
-    yield desc
+  yield from get_instance().get_consensus(
+      start,
+      end,
+      cache_to,
+      document_handler,
+      version,
+      microdescriptor,
+      bridge,
+      timeout,
+      retries,
+  )
 
 
 def get_key_certificates(start = None, end = None, cache_to = None, timeout = None, retries = 3):
@@ -175,8 +184,8 @@ def get_key_certificates(start = None, end = None, cache_to = None, timeout = No
   on our singleton instance.
   """
 
-  for desc in get_instance().get_key_certificates(start, end, cache_to, timeout, retries):
-    yield desc
+  yield from get_instance().get_key_certificates(start, end, cache_to, timeout,
+                                                 retries)
 
 
 def get_bandwidth_files(start = None, end = None, cache_to = None, timeout = None, retries = 3):
@@ -186,8 +195,8 @@ def get_bandwidth_files(start = None, end = None, cache_to = None, timeout = Non
   on our singleton instance.
   """
 
-  for desc in get_instance().get_bandwidth_files(start, end, cache_to, timeout, retries):
-    yield desc
+  yield from get_instance().get_bandwidth_files(start, end, cache_to, timeout,
+                                                retries)
 
 
 def get_exit_lists(start = None, end = None, cache_to = None, timeout = None, retries = 3):
@@ -197,8 +206,8 @@ def get_exit_lists(start = None, end = None, cache_to = None, timeout = None, re
   on our singleton instance.
   """
 
-  for desc in get_instance().get_exit_lists(start, end, cache_to, timeout, retries):
-    yield desc
+  yield from get_instance().get_exit_lists(start, end, cache_to, timeout,
+                                           retries)
 
 
 class File(object):
@@ -283,9 +292,8 @@ class File(object):
 
         tmp_directory = tempfile.mkdtemp()
 
-        for desc in self.read(tmp_directory, descriptor_type, document_handler, timeout, retries):
-          yield desc
-
+        yield from self.read(tmp_directory, descriptor_type, document_handler,
+                             timeout, retries)
         shutil.rmtree(tmp_directory)
 
         return
@@ -358,11 +366,12 @@ class File(object):
     :returns: **tuple** with the descriptor types this file is expected to have
     """
 
-    for path_prefix, types in COLLECTOR_DESC_TYPES.items():
-      if path.startswith(path_prefix):
-        return (types,) if isinstance(types, str) else types
-
-    return ()
+    return next(
+        ((types, ) if isinstance(types, str) else types
+         for path_prefix, types in COLLECTOR_DESC_TYPES.items()
+         if path.startswith(path_prefix)),
+        (),
+    )
 
   @staticmethod
   def _guess_compression(path):
@@ -370,11 +379,14 @@ class File(object):
     Determine file comprssion from CollecTor's filename.
     """
 
-    for compression in (Compression.LZMA, Compression.BZ2, Compression.GZIP):
-      if path.endswith(compression.extension):
-        return compression
-
-    return Compression.PLAINTEXT
+    return next(
+        (compression for compression in (
+            Compression.LZMA,
+            Compression.BZ2,
+            Compression.GZIP,
+        ) if path.endswith(compression.extension)),
+        Compression.PLAINTEXT,
+    )
 
   @staticmethod
   def _guess_time_range(path):
@@ -383,9 +395,7 @@ class File(object):
     This provides (None, None) if this cannot be determined.
     """
 
-    year_match = YEAR_DATE.search(path)
-
-    if year_match:
+    if year_match := YEAR_DATE.search(path):
       year, month = map(int, year_match.groups())
       start = datetime.datetime(year, month, 1)
 
@@ -394,9 +404,7 @@ class File(object):
       else:
         return (start, datetime.datetime(year + 1, 1, 1))
 
-    sec_match = SEC_DATE.search(path)
-
-    if sec_match:
+    if sec_match := SEC_DATE.search(path):
       # Descriptors in the 'recent/*' section have filenames with second level
       # granularity. Not quite sure why, but since consensus documents are
       # published hourly we'll use that as the delta here.
@@ -447,11 +455,10 @@ class CollecTor(object):
     :raises: :class:`~stem.DownloadFailed` if the download fails
     """
 
-    desc_type = 'server-descriptor' if not bridge else 'bridge-server-descriptor'
+    desc_type = 'bridge-server-descriptor' if bridge else 'server-descriptor'
 
     for f in self.files(desc_type, start, end):
-      for desc in f.read(cache_to, desc_type, timeout = timeout, retries = retries):
-        yield desc
+      yield from f.read(cache_to, desc_type, timeout = timeout, retries = retries)
 
   def get_extrainfo_descriptors(self, start = None, end = None, cache_to = None, bridge = False, timeout = None, retries = 3):
     """
@@ -474,11 +481,10 @@ class CollecTor(object):
     :raises: :class:`~stem.DownloadFailed` if the download fails
     """
 
-    desc_type = 'extra-info' if not bridge else 'bridge-extra-info'
+    desc_type = 'bridge-extra-info' if bridge else 'extra-info'
 
     for f in self.files(desc_type, start, end):
-      for desc in f.read(cache_to, desc_type, timeout = timeout, retries = retries):
-        yield desc
+      yield from f.read(cache_to, desc_type, timeout = timeout, retries = retries)
 
   def get_microdescriptors(self, start = None, end = None, cache_to = None, timeout = None, retries = 3):
     """
@@ -510,8 +516,8 @@ class CollecTor(object):
     """
 
     for f in self.files('microdescriptor', start, end):
-      for desc in f.read(cache_to, 'microdescriptor', timeout = timeout, retries = retries):
-        yield desc
+      yield from f.read(
+          cache_to, 'microdescriptor', timeout=timeout, retries=retries)
 
   def get_consensus(self, start = None, end = None, cache_to = None, document_handler = DocumentHandler.ENTRIES, version = 3, microdescriptor = False, bridge = False, timeout = None, retries = 3):
     """
@@ -547,15 +553,21 @@ class CollecTor(object):
       desc_type = 'network-status-2'
     elif bridge:
       desc_type = 'bridge-network-status'
+    elif microdescriptor:
+      raise ValueError(
+          f'Only v3 microdescriptors are available (not version {version})')
     else:
-      if microdescriptor and version != 3:
-        raise ValueError('Only v3 microdescriptors are available (not version %s)' % version)
-      else:
-        raise ValueError('Only v2 and v3 router status entries are available (not version %s)' % version)
+      raise ValueError(
+          f'Only v2 and v3 router status entries are available (not version {version})'
+      )
 
     for f in self.files(desc_type, start, end):
-      for desc in f.read(cache_to, desc_type, document_handler, timeout = timeout, retries = retries):
-        yield desc
+      yield from f.read(
+          cache_to,
+          desc_type,
+          document_handler,
+          timeout=timeout,
+          retries=retries)
 
   def get_key_certificates(self, start = None, end = None, cache_to = None, timeout = None, retries = 3):
     """
@@ -578,8 +590,8 @@ class CollecTor(object):
     """
 
     for f in self.files('dir-key-certificate-3', start, end):
-      for desc in f.read(cache_to, 'dir-key-certificate-3', timeout = timeout, retries = retries):
-        yield desc
+      yield from f.read(
+          cache_to, 'dir-key-certificate-3', timeout=timeout, retries=retries)
 
   def get_bandwidth_files(self, start = None, end = None, cache_to = None, timeout = None, retries = 3):
     """
@@ -602,8 +614,8 @@ class CollecTor(object):
     """
 
     for f in self.files('bandwidth-file', start, end):
-      for desc in f.read(cache_to, 'bandwidth-file', timeout = timeout, retries = retries):
-        yield desc
+      yield from f.read(
+          cache_to, 'bandwidth-file', timeout=timeout, retries=retries)
 
   def get_exit_lists(self, start = None, end = None, cache_to = None, timeout = None, retries = 3):
     """
@@ -626,8 +638,7 @@ class CollecTor(object):
     """
 
     for f in self.files('tordnsel', start, end):
-      for desc in f.read(cache_to, 'tordnsel', timeout = timeout, retries = retries):
-        yield desc
+      yield from f.read(cache_to, 'tordnsel', timeout = timeout, retries = retries)
 
   def index(self, compression = 'best'):
     """
@@ -657,7 +668,7 @@ class CollecTor(object):
         compression = Compression.PLAINTEXT
 
       extension = compression.extension if compression != Compression.PLAINTEXT else ''
-      url = COLLECTOR_URL + 'index/index.json' + extension
+      url = f'{COLLECTOR_URL}index/index.json{extension}'
       response = compression.decompress(stem.util.connection.download(url, self.timeout, self.retries))
 
       self._cached_index = json.loads(stem.util.str_tools._to_unicode(response))
@@ -684,7 +695,8 @@ class CollecTor(object):
     """
 
     if not self._cached_files or time.time() - self._cached_index_at >= REFRESH_INDEX_RATE:
-      self._cached_files = sorted(CollecTor._files(self.index(), []), key = lambda x: x.start if x.start else FUTURE)
+      self._cached_files = sorted(
+          CollecTor._files(self.index(), []), key=lambda x: x.start or FUTURE)
 
     matches = []
 
@@ -694,7 +706,9 @@ class CollecTor(object):
       elif end and (f.end is None or f.end > end):
         continue
 
-      if descriptor_type is None or any([desc_type.startswith(descriptor_type) for desc_type in f._guessed_type]):
+      if descriptor_type is None or any(
+          desc_type.startswith(descriptor_type)
+          for desc_type in f._guessed_type):
         matches.append(f)
 
     return matches

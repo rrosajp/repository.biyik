@@ -56,13 +56,7 @@ def _hash_value(val):
     #
     # This hack will go away when we drop Python 2.x support.
 
-    if _is_str(val):
-      my_hash = hash('str')
-    else:
-      # Hashing common builtins (ints, bools, etc) provide consistant values but many others vary their value on interpreter invokation.
-
-      my_hash = hash(str(type(val)))
-
+    my_hash = hash('str') if _is_str(val) else hash(str(type(val)))
   if isinstance(val, (tuple, list)):
     for v in val:
       my_hash = (my_hash * 1024) + hash(v)
@@ -120,11 +114,10 @@ def datetime_to_unix(timestamp):
   :returns: **float** for the unix timestamp of the given datetime object
   """
 
-  if stem.prereq._is_python_26():
-    delta = (timestamp - datetime.datetime(1970, 1, 1))
-    return delta.days * 86400 + delta.seconds
-  else:
+  if not stem.prereq._is_python_26():
     return (timestamp - datetime.datetime(1970, 1, 1)).total_seconds()
+  delta = (timestamp - datetime.datetime(1970, 1, 1))
+  return delta.days * 86400 + delta.seconds
 
 
 def _hash_attr(obj, *attributes, **kwargs):
@@ -138,7 +131,7 @@ def _hash_attr(obj, *attributes, **kwargs):
   """
 
   is_cached = kwargs.get('cache', False)
-  parent_class = kwargs.get('parent', None)
+  parent_class = kwargs.get('parent')
   cached_hash = getattr(obj, '_cached_hash', None)
 
   if is_cached and cached_hash is not None:

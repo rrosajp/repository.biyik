@@ -52,9 +52,8 @@ class Dispatcher:
         while self.app.keep_running:
             r, w, e = select.select(
                 (self.app.sock.sock, ), (), (), self.ping_timeout)
-            if r:
-                if not read_callback():
-                    break
+            if r and not read_callback():
+                break
             check_callback()
 
 
@@ -68,8 +67,7 @@ class SSLDispatcher:
 
     def read(self, sock, read_callback, check_callback):
         while self.app.keep_running:
-            r = self.select()
-            if r:
+            if r := self.select():
                 if not read_callback():
                     break
             check_callback()
@@ -199,7 +197,7 @@ class WebSocketApp(object):
                 try:
                     self.sock.ping(payload)
                 except Exception as ex:
-                    _logging.warning("send_ping routine terminated: {}".format(ex))
+                    _logging.warning(f"send_ping routine terminated: {ex}")
                     break
 
     def run_forever(self, sockopt=None, sslopt=None,
@@ -289,10 +287,14 @@ class WebSocketApp(object):
 
         try:
             self.sock = WebSocket(
-                self.get_mask_key, sockopt=sockopt, sslopt=sslopt,
+                self.get_mask_key,
+                sockopt=sockopt,
+                sslopt=sslopt,
                 fire_cont_frame=self.on_cont_message is not None,
                 skip_utf8_validation=skip_utf8_validation,
-                enable_multithread=True if ping_interval else False)
+                enable_multithread=bool(ping_interval),
+            )
+
             self.sock.settimeout(getdefaulttimeout())
             self.sock.connect(
                 self.url, header=self.header, cookie=self.cookie,
@@ -376,12 +378,11 @@ class WebSocketApp(object):
         if sys.version_info < (3, 0):
             if not self.on_close or len(inspect.getargspec(self.on_close).args) != 3:
                 return []
-        else:
-            if not self.on_close or len(inspect.getfullargspec(self.on_close).args) != 3:
-                return []
+        elif not self.on_close or len(inspect.getfullargspec(self.on_close).args) != 3:
+            return []
 
         if data and len(data) >= 2:
-            code = 256 * six.byte2int(data[0:1]) + six.byte2int(data[1:2])
+            code = 256 * six.byte2int(data[:1]) + six.byte2int(data[1:2])
             reason = data[2:].decode('utf-8')
             return [code, reason]
 
@@ -393,7 +394,7 @@ class WebSocketApp(object):
                 callback(self, *args)
 
             except Exception as e:
-                _logging.error("error from callback {}: {}".format(callback, e))
+                _logging.error(f"error from callback {callback}: {e}")
                 if _logging.isEnabledForDebug():
                     _, _, tb = sys.exc_info()
                     traceback.print_tb(tb)

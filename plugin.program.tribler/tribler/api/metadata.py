@@ -10,12 +10,15 @@ from . import common
 class metadata:
     @staticmethod
     def torrenthealth(infohash, refresh=0, timeout=defs.DHT_TIMEOUT):
-        return common.call("GET", "metadata/torrents/%s/health" % infohash,
-                           refresh=refresh,
-                           timeout=timeout)
+        return common.call(
+            "GET",
+            f"metadata/torrents/{infohash}/health",
+            refresh=refresh,
+            timeout=timeout,
+        )
 
     @staticmethod
     def subscribe(chanid, publickey, subscribed=True):
-        resp = common.call("PATCH", "metadata/%s/%s" % (publickey,
-                                                        chanid), subscribed=subscribed)
-        return resp
+        return common.call(
+            "PATCH", f"metadata/{publickey}/{chanid}", subscribed=subscribed
+        )

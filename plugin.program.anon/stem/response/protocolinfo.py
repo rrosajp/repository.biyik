@@ -43,7 +43,7 @@ class ProtocolInfoResponse(stem.response.ControlMessage):
     auth_methods, unknown_auth_methods = [], []
     remaining_lines = list(self)
 
-    if not self.is_ok() or not remaining_lines.pop() == 'OK':
+    if not self.is_ok() or remaining_lines.pop() != 'OK':
       raise stem.ProtocolError("PROTOCOLINFO response didn't have an OK status:\n%s" % self)
 
     # sanity check that we're a PROTOCOLINFO response
@@ -65,7 +65,8 @@ class ProtocolInfoResponse(stem.response.ControlMessage):
         try:
           self.protocol_version = int(line.pop())
         except ValueError:
-          raise stem.ProtocolError('PROTOCOLINFO response version is non-numeric: %s' % line)
+          raise stem.ProtocolError(
+              f'PROTOCOLINFO response version is non-numeric: {line}')
 
         # The piversion really should be '1' but, according to the spec, tor
         # does not necessarily need to provide the PROTOCOLINFO version that we
@@ -96,7 +97,7 @@ class ProtocolInfoResponse(stem.response.ControlMessage):
             auth_methods.append(AuthMethod.SAFECOOKIE)
           else:
             unknown_auth_methods.append(method)
-            message_id = 'stem.response.protocolinfo.unknown_auth_%s' % method
+            message_id = f'stem.response.protocolinfo.unknown_auth_{method}'
             log.log_once(message_id, log.INFO, "PROTOCOLINFO response included a type of authentication that we don't recognize: %s" % method)
 
             # our auth_methods should have a single AuthMethod.UNKNOWN entry if

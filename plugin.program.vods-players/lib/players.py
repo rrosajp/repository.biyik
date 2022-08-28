@@ -44,7 +44,7 @@ class youtube(addonplayerextension):
             vid = up.path[1:]
         else:
             raise StopIteration
-        yield "plugin://plugin.video.youtube/play/?video_id=%s" % vid
+        yield f"plugin://plugin.video.youtube/play/?video_id={vid}"
 
 
 class dailymotion(addonplayerextension):
@@ -59,6 +59,6 @@ class dailymotion(addonplayerextension):
         dom = up.netloc.lower()
         if "dailymotion.com" in dom:
             vid = up.path.split("/")[-1]
-            yield "plugin://plugin.video.dailymotion_com/?url=%s&mode=playLiveVideo" % vid
+            yield f"plugin://plugin.video.dailymotion_com/?url={vid}&mode=playLiveVideo"
         else:
             yield

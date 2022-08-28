@@ -4,6 +4,7 @@
 
 """
 
+
 """
 websocket - WebSocket client library for Python
 
@@ -26,7 +27,7 @@ Copyright (C) 2010 Hiroki Ohtani(liris)
 """
 
 import sys
-sys.path[0:0] = [""]
+sys.path[:0] = [""]
 
 import os
 import os.path

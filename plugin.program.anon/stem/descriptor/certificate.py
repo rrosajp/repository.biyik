@@ -119,7 +119,7 @@ class Ed25519Certificate(object):
     except (TypeError, binascii.Error) as exc:
       raise ValueError("Ed25519 certificate wasn't propoerly base64 encoded (%s):\n%s" % (exc, content))
 
-    version = stem.util.str_tools._to_int(decoded[0:1])
+    version = stem.util.str_tools._to_int(decoded[:1])
 
     if version == 1:
       return Ed25519CertificateV1(version, content, decoded)
@@ -165,7 +165,9 @@ class Ed25519CertificateV1(Ed25519Certificate):
     try:
       self.expiration = datetime.datetime.utcfromtimestamp(stem.util.str_tools._to_int(decoded[2:6]) * 3600)
     except ValueError as exc:
-      raise ValueError('Invalid expiration timestamp (%s): %s' % (exc, stem.util.str_tools._to_int(decoded[2:6]) * 3600))
+      raise ValueError(
+          f'Invalid expiration timestamp ({exc}): {stem.util.str_tools._to_int(decoded[2:6]) * 3600}'
+      )
 
     self.key_type = stem.util.str_tools._to_int(decoded[6:7])
     self.key = decoded[7:39]
@@ -175,7 +177,7 @@ class Ed25519CertificateV1(Ed25519Certificate):
     extension_count = stem.util.str_tools._to_int(decoded[39:40])
     remaining_data = decoded[40:-ED25519_SIGNATURE_LENGTH]
 
-    for i in range(extension_count):
+    for _ in range(extension_count):
       if len(remaining_data) < 4:
         raise ValueError('Ed25519 extension is missing header field data')
 

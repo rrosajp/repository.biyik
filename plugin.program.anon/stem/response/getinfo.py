@@ -28,7 +28,7 @@ class GetInfoResponse(stem.response.ControlMessage):
     self.entries = {}
     remaining_lines = [content for (code, div, content) in self.content(get_bytes = True)]
 
-    if not self.is_ok() or not remaining_lines.pop() == b'OK':
+    if not self.is_ok() or remaining_lines.pop() != b'OK':
       unrecognized_keywords = []
       error_code, error_msg = None, None
 

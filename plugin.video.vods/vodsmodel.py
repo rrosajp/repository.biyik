@@ -37,11 +37,10 @@ class extension(object):
         return self.__container.download(*args, **kwargs)
 
     def localtime(self, dtob, utc=True):
-        if utc:
-            dtob = dtob.replace(tzinfo=tools.tz_utc())
-            return dtob.astimezone(tools.tz_local())
-        else:
+        if not utc:
             return dtob.replace(tzinfo=tools.tz_local())
+        dtob = dtob.replace(tzinfo=tools.tz_utc())
+        return dtob.astimezone(tools.tz_local())
 
     def init(self, *args, **kwargs):
         pass
@@ -53,10 +52,10 @@ class extension(object):
         mname = self.__class__.__module__
         cname = self.__class__.__name__
         path = ".".join([self.addonid, mname, cname, "metacache"])
-        mname = "cache%ss" % typ
+        mname = f"cache{typ}s"
         stack = self.hay(path)
-        info = stack.find("%s%sinfo" % (repr(arg), typ)).data
-        art = stack.find("%s%sart" % (repr(arg), typ)).data
+        info = stack.find(f"{repr(arg)}{typ}info").data
+        art = stack.find(f"{repr(arg)}{typ}art").data
         isimp = hasattr(self, mname)
         if info == {} and art == {} and isimp:
             cache = getattr(self, mname)
@@ -64,9 +63,9 @@ class extension(object):
             name = info.get("title")
             if not name:
                 name = info.get("tvshowtitle", "media")
-            stack.throw("%s%sinfo" % (repr(arg), typ), info)
-            stack.throw("%s%sart" % (repr(arg), typ), art)
-            gui.notify(self.__class__.__name__, "Cached %s" % name, False)
+            stack.throw(f"{repr(arg)}{typ}info", info)
+            stack.throw(f"{repr(arg)}{typ}art", art)
+            gui.notify(self.__class__.__name__, f"Cached {name}", False)
         return info, art
 
 

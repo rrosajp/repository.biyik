@@ -26,36 +26,34 @@ class download:
     def setstate(ihash, state):
         if state == "stop":
             download.setvodmode(ihash, False)
-        return common.call("PATCH", "downloads/%s" % ihash, state=state)
+        return common.call("PATCH", f"downloads/{ihash}", state=state)
 
     @staticmethod
     def setvodmode(ihash, vod_mode, fileindex=None):
-        if vod_mode:
-            resp = common.call("PATCH", "downloads/%s" % ihash, vod_mode=True, fileindex=fileindex)
-        else:
-            resp = common.call("PATCH", "downloads/%s" % ihash, vod_mode=False)
-        return resp
+        return (
+            common.call(
+                "PATCH", f"downloads/{ihash}", vod_mode=True, fileindex=fileindex
+            )
+            if vod_mode
+            else common.call("PATCH", f"downloads/{ihash}", vod_mode=False)
+        )
 
     @staticmethod
     def sethops(ihash, hops):
-        return common.call("PATCH", "downloads/%s" % ihash, anon_hops=hops)
+        return common.call("PATCH", f"downloads/{ihash}", anon_hops=hops)
 
     @staticmethod
     def delete(ihash, remove_data=None):
-        return common.call("DELETE", "downloads/%s" % ihash, remove_data=remove_data)
+        return common.call("DELETE", f"downloads/{ihash}", remove_data=remove_data)
 
     @staticmethod
     def list(get_files=0):
-        downloads = common.call("GET", "downloads", get_files=get_files)
-        if downloads:
+        if downloads := common.call("GET", "downloads", get_files=get_files):
             return downloads.get("downloads", [])
         else:
             return []
 
     @staticmethod
     def files(infohash):
-        resp = common.call("GET", "downloads/%s/files" % infohash)
-        if resp and "files" in resp:
-            return resp.get("files", [])
-        else:
-            return []
+        resp = common.call("GET", f"downloads/{infohash}/files")
+        return resp.get("files", []) if resp and "files" in resp else []

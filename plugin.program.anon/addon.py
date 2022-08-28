@@ -40,10 +40,7 @@ class viewer(gui.form):
 
 def getinputpw(txt):
     conf, ret = gui.keyboard("", txt, True)
-    if conf:
-        return ret
-    else:
-        return ""
+    return ret if conf else ""
 
 
 class navi(container.container):
@@ -51,7 +48,7 @@ class navi(container.container):
     def init(self):
         self.platform = self.machine()
         if not isinstance(self.platform, Base):
-            gui.ok("ANON", "%s platfrom is not supported" % self.platform)
+            gui.ok("ANON", f"{self.platform} platfrom is not supported")
             sys.exit()
 
     def checkreq(self):
@@ -107,14 +104,15 @@ class navi(container.container):
         if self.checkreq() is None:
             self._stop()
         container.refresh()
-    def index(self):
+
+    def index(self):
         self.item("Settings", method="settings").dir()
 
         vconnected = "[COLOR red]Disconnected[/COLOR]"
         for _ in self.platform.findpids("openvpn"):
             vconnected = "[COLOR green]Connected[/COLOR]"
             break
-        self.item("VPN Status: %s" % vconnected).call()
+        self.item(f"VPN Status: {vconnected}").call()
 
         try:
             controller = Controller.from_port(port=int(self.platform.getsetting("tor_control_port")))
@@ -125,18 +123,18 @@ class navi(container.container):
                 raise Exception
         except Exception:
             tconnected = "[COLOR red]Disconnected[/COLOR]"
-        self.item("Tor Status: %s" % tconnected).call()
+        self.item(f"Tor Status: {tconnected}").call()
 
         self.item("Statistics", method="statistics").dir()
         self.item("Stop", method="stop").call()
         self.item("(Re)Start", method="start").call()
 
     def statistics(self):
-        self.item("Platform: %s" % self.platform.machineid)
+        self.item(f"Platform: {self.platform.machineid}")
         self.autoupdate = 5
         if not self.checkreq():
             for k, v in self.platform.stats().iteritems():
-                self.item("%s: %s" % (k.replace("_", " ").title(), v)).call()
+                self.item(f'{k.replace("_", " ").title()}: {v}').call()
 
     def select(self, key, isall):
         if isall:
@@ -148,7 +146,7 @@ class navi(container.container):
     def settings(self):
         title = "View OVPN Config File"
         if self.platform.getsetting("openvpn_config") == "?":
-            title = "[COLOR red]%s[/COLOR]" % title
+            title = f"[COLOR red]{title}[/COLOR]"
         self.item(title, method="viewcfg").call()
         self.item("Browse OVPN Config File", method="setvpnconfig").call()
         cntx = {self.item("No Specific Exit Node", method="setcfg"): ["tor_use_specific_exit_node", "-", False, False],
@@ -159,14 +157,20 @@ class navi(container.container):
 
         select_all = self.item("Select All", method="select")
         select_none = self.item("Select None", method="select")
-        limit_tor_nodes = self.item("Limit Location of All Tor Nodes to: %s Countriess" % len(self.platform.getsetting("tor_limit_nodes_to")),
-                                    method="selectcountry")
+        limit_tor_nodes = self.item(
+            f'Limit Location of All Tor Nodes to: {len(self.platform.getsetting("tor_limit_nodes_to"))} Countriess',
+            method="selectcountry",
+        )
+
         limit_tor_nodes.context(select_all, False, "tor_limit_nodes_to", True)
         limit_tor_nodes.context(select_none, False, "tor_limit_nodes_to", False)
         limit_tor_nodes.call("tor_limit_nodes_to")
         if force_exit == "-":
-            limit_tor_exit_nodes = self.item("Limit Location of Tor Exit Nodes to: %s Countries" % len(self.platform.getsetting("tor_limit_exit_nodes_to")),
-                                             method="selectcountry")
+            limit_tor_exit_nodes = self.item(
+                f'Limit Location of Tor Exit Nodes to: {len(self.platform.getsetting("tor_limit_exit_nodes_to"))} Countries',
+                method="selectcountry",
+            )
+
             limit_tor_exit_nodes.context(select_all, True, "tor_limit_exit_nodes_to", True)
             limit_tor_exit_nodes.context(select_none, True, "tor_limit_exit_nodes_to", False)
             limit_tor_exit_nodes.dir("tor_limit_exit_nodes_to")
@@ -182,7 +186,12 @@ class navi(container.container):
             ctry = gui.select("Select Country", defs.tor_countries)
             if ctry >= 0:
                 ctry = defs.tor_countries[ctry]
-                nodes = json.loads(self.download("https://onionoo.torproject.org/details?search=flag:exit country:%s" % ctry))
+                nodes = json.loads(
+                    self.download(
+                        f"https://onionoo.torproject.org/details?search=flag:exit country:{ctry}"
+                    )
+                )
+
                 if not len(nodes["relays"]):
                     gui.ok(ctry, "Can't find any exit nodes in %s" % ctry)
                     return
@@ -205,11 +214,11 @@ class navi(container.container):
         old = self.platform.getsetting(key)
         title = key.replace("_", " ").title()
         if old == "?":
-            title = "[COLOR red]%s[/COLOR]" % title
+            title = f"[COLOR red]{title}[/COLOR]"
         ispw = "password" in key
         if ispw:
             old = "*" * len(old)
-        item = self.item("%s : %s" % (title, old), method="setcfg")
+        item = self.item(f"{title} : {old}", method="setcfg")
         if cntx:
             for context, args in cntx.iteritems():
                 item.context(context, False, *args)
@@ -218,8 +227,9 @@ class navi(container.container):
 
     def selectcountry(self, key):
         current = self.platform.getsetting(key)
-        ncurrent = gui.select("Allowed Countries", defs.tor_countries, False, current, False, True)
-        if ncurrent:
+        if ncurrent := gui.select(
+            "Allowed Countries", defs.tor_countries, False, current, False, True
+        ):
             self.platform.setsetting(key, ncurrent)
 
     def getfile(self):
@@ -242,8 +252,7 @@ class navi(container.container):
                 return cfg
 
     def setvpnconfig(self):
-        cfg = self.getfile()
-        if cfg:
+        if cfg := self.getfile():
             self.platform.setsetting("openvpn_config", cfg)
         container.refresh()
 
@@ -252,7 +261,7 @@ class navi(container.container):
             self.platform.setsetting(key, value)
         else:
             conf, nvalue = gui.keyboard(value, hidden=hidden)
-            if conf and not value == "auto":
+            if conf and value != "auto":
                 self.platform.setsetting(key, nvalue)
         container.refresh()
 
@@ -280,19 +289,18 @@ class navi(container.container):
             if "arm" in mach:
                 arch = "arm"
             arch = "x86"
-        if ar == "64bit":
+        elif ar == "64bit":
             if "arm" in mach:
                 arch = "aarch64"
             arch = "amd64"
-        machine = "%s-%s" % (os, arch)
-        if os == "linux":
-            if iselec:
-                from anon.platforms import libreelec
-                return libreelec.Platform(addon.get_addondir(), machine, getinputpw)
-            from anon.platforms import linux
-            return linux.Platform(addon.get_addondir(), machine, getinputpw)
-        else:
+        machine = f"{os}-{arch}"
+        if os != "linux":
             return machine
+        if iselec:
+            from anon.platforms import libreelec
+            return libreelec.Platform(addon.get_addondir(), machine, getinputpw)
+        from anon.platforms import linux
+        return linux.Platform(addon.get_addondir(), machine, getinputpw)
 
 
 navi()

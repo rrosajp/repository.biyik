@@ -59,29 +59,28 @@ _ddir = _mkdir(_ddir, "script.module.ghub", "src")
 
 def _page(u, progress=None):
     response = request.urlopen(u)
-    if progress:
-        output = b""
-        dialog = xbmcgui.DialogProgressBG()
-        dialog.create(progress)
-        i = 0
-        while True:
-            if i == 100:
-                i = 0
-            o = response.read(102400)
-            if o == b"":
-                break
-            else:
-                output += o
-            i += 1
-            dialog.update(i, "Updating", progress)
-        dialog.close()
-        return output
-    else:
+    if not progress:
         return response.read()
+    output = b""
+    dialog = xbmcgui.DialogProgressBG()
+    dialog.create(progress)
+    i = 0
+    while True:
+        if i == 100:
+            i = 0
+        o = response.read(102400)
+        if o == b"":
+            break
+        else:
+            output += o
+        i += 1
+        dialog.update(i, "Updating", progress)
+    dialog.close()
+    return output
 
 
 def _getrels(uname, rname):
-    page = htmlement.fromstring(_page("https://%s/%s/%s/tags" % (_dom, uname, rname)))
+    page = htmlement.fromstring(_page(f"https://{_dom}/{uname}/{rname}/tags"))
     rels = page.findall(".//div[@class='Box']/div/div/div/.//ul")
     allrels = []
     for rel in rels:
@@ -90,7 +89,7 @@ def _getrels(uname, rname):
         for a in rel.findall(".//a"):
             href = a.get("href")
             if href and href.endswith(".zip"):
-                zipu = "https://" + _dom + href
+                zipu = f"https://{_dom}{href}"
             if href and "/commit/" in href:
                 commit = href.split("/")[-1]
         if zipu and commit:
@@ -100,17 +99,16 @@ def _getrels(uname, rname):
 
 def _getcommits(uname, rname, branch, commit):
     if not commit:
-        page = htmlement.fromstring(_page("https://%s/%s/%s/commits/%s" % (_dom, uname, rname, branch)))
+        page = htmlement.fromstring(
+            _page(f"https://{_dom}/{uname}/{rname}/commits/{branch}")
+        )
+
         comms = [x.get("value") for x in page.findall('.//clipboard-copy')]
     else:
         comms = [commit]
     allcoms = []
     for commit in comms:
-        zipu = "https://codeload.%s/%s/%s/zip/%s" % (_dom,
-                                                     uname,
-                                                     rname,
-                                                     commit
-                                                     )
+        zipu = f"https://codeload.{_dom}/{uname}/{rname}/zip/{commit}"
         allcoms.append([commit, zipu])
     return allcoms
 
@@ -129,19 +127,18 @@ def _load(uname, rname, branch, commit, path, period):
     bdir = _mkdir(_ddir, uname)
 
     # load memory file
-    if branch:
-        bdir = _mkdir(bdir, "branch", branch)
-    else:
-        bdir = _mkdir(bdir, "release")
-    memfile = os.path.join(bdir, rname + ".json")
+    bdir = _mkdir(bdir, "branch", branch) if branch else _mkdir(bdir, "release")
+    memfile = os.path.join(bdir, f"{rname}.json")
     if os.path.exists(memfile):
         with open(memfile) as infile:
             mem = json.load(infile)
 
     # check if we need to update
     if mem and time.time() - mem["ts"] < period * 60 * 60:
-        print("GITHUB: INFO: Using Existing, no need to check: %s Repo:%s Branch:%s Commit: %s" % (uname, rname, branch, commit))
-        return bdir
+        print(
+            f"GITHUB: INFO: Using Existing, no need to check: {uname} Repo:{rname} Branch:{branch} Commit: {commit}"
+        )
+
     else:
         # get latest commits
         try:
@@ -150,22 +147,28 @@ def _load(uname, rname, branch, commit, path, period):
             else:
                 ref = _getrels(uname, rname)
         except Exception:
-            print("GITHUB: WARNING: Can not get latest meta: User:%s Repo:%s Branch:%s Commit: %s" % (uname, rname, branch, commit))
+            print(
+                f"GITHUB: WARNING: Can not get latest meta: User:{uname} Repo:{rname} Branch:{branch} Commit: {commit}"
+            )
+
             print(traceback.format_exc())
             return
 
         # download new package, extract and update the memory file
         lcommit, zipu = ref[0]
-        if not mem or not lcommit == mem["latest"]:
-            print("GITHUB: INFO: Updating to commit %s->%s for %s Repo:%s Branch:%s Commit: %s" % (lcommit, zipu,
-                                                                                                   uname, rname, branch, commit))
+        if not mem or lcommit != mem["latest"]:
+            print(
+                f"GITHUB: INFO: Updating to commit {lcommit}->{zipu} for {uname} Repo:{rname} Branch:{branch} Commit: {commit}"
+            )
+
             _updatezip(zipu, bdir, rname)
             data = {"ts": time.time(),
                     "latest": lcommit
                     }
             with open(memfile, 'w') as outfile:
                 json.dump(data, outfile)
-        return bdir
+
+    return bdir
 
 
 def load(uname, rname, branch, commit=None, path=None, period=24):
@@ -202,9 +205,7 @@ def load(uname, rname, branch, commit=None, path=None, period=24):
     """
     if not path:
         path = []
-    bdir = _load(uname, rname, branch, commit, path, period)
-    # prepare the path
-    if bdir:
+    if bdir := _load(uname, rname, branch, commit, path, period):
         sdir = None
         for d in os.listdir(bdir):
             sdir = os.path.join(bdir, d)

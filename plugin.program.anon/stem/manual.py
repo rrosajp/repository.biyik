@@ -239,31 +239,36 @@ def _manual_differences(previous_manual, new_manual):
       lines.append("* Manual's %s attribute changed\n" % attr)
 
       if attr in ('name', 'synopsis', 'description'):
-        lines.append('  Previously...\n\n%s\n' % previous_attr)
-        lines.append('  Updating to...\n\n%s' % new_attr)
+        lines.extend((
+            '  Previously...\n\n%s\n' % previous_attr,
+            '  Updating to...\n\n%s' % new_attr,
+        ))
       elif attr == 'config_options':
         for config_name, config_attr in new_attr.items():
           previous = previous_attr.get(config_name)
 
           if previous is None:
-            lines.append('  adding new config option => %s' % config_name)
+            lines.append(f'  adding new config option => {config_name}')
           elif config_attr != previous:
-            for attr in ('name', 'category', 'usage', 'summary', 'description'):
-              if getattr(config_attr, attr) != getattr(previous, attr):
-                lines.append('  modified %s (%s) => %s' % (config_name, attr, getattr(config_attr, attr)))
-
-        for config_name in set(previous_attr.keys()).difference(new_attr.keys()):
-          lines.append('  removing config option => %s' % config_name)
+            lines.extend(
+                f'  modified {config_name} ({attr}) => {getattr(config_attr, attr)}'
+                for attr in (
+                    'name',
+                    'category',
+                    'usage',
+                    'summary',
+                    'description',
+                ) if getattr(config_attr, attr) != getattr(previous, attr))
+        lines.extend(f'  removing config option => {config_name}'
+                     for config_name in set(previous_attr.keys()).difference(
+                         new_attr.keys()))
       else:
         added_items = set(new_attr.items()).difference(previous_attr.items())
         removed_items = set(previous_attr.items()).difference(new_attr.items())
 
-        for added_item in added_items:
-          lines.append('  adding %s => %s' % added_item)
-
-        for removed_item in removed_items:
-          lines.append('  removing %s => %s' % removed_item)
-
+        lines.extend('  adding %s => %s' % added_item for added_item in added_items)
+        lines.extend('  removing %s => %s' % removed_item
+                     for removed_item in removed_items)
       lines.append('\n')
 
   return '\n'.join(lines)
@@ -317,7 +322,7 @@ def download_man_page(path = None, file_handle = None, url = GITWEB_MANUAL_URL, 
       raise stem.DownloadFailed(url, exc, stacktrace, message)
 
     try:
-      stem.util.system.call('a2x -f manpage %s' % asciidoc_path)
+      stem.util.system.call(f'a2x -f manpage {asciidoc_path}')
 
       if not os.path.exists(manual_path):
         raise OSError('no man page was generated')
@@ -436,7 +441,7 @@ class Manual(object):
 
         name, synopsis, description, man_commit, stem_commit = conn.execute('SELECT name, synopsis, description, man_commit, stem_commit FROM metadata').fetchone()
       except sqlite3.OperationalError as exc:
-        raise IOError('Failed to read database metadata from %s: %s' % (path, exc))
+        raise IOError(f'Failed to read database metadata from {path}: {exc}')
 
       commandline = dict(conn.execute('SELECT name, description FROM commandline').fetchall())
       signals = dict(conn.execute('SELECT name, description FROM signals').fetchall())
@@ -468,11 +473,11 @@ class Manual(object):
 
         if key not in config_options:
           config_options[key] = ConfigOption(
-            conf.get('config_options.%s.name' % key, ''),
-            conf.get('config_options.%s.category' % key, ''),
-            conf.get('config_options.%s.usage' % key, ''),
-            conf.get('config_options.%s.summary' % key, ''),
-            conf.get('config_options.%s.description' % key, '')
+              conf.get(f'config_options.{key}.name', ''),
+              conf.get(f'config_options.{key}.category', ''),
+              conf.get(f'config_options.{key}.usage', ''),
+              conf.get(f'config_options.{key}.summary', ''),
+              conf.get(f'config_options.{key}.description', ''),
           )
 
     manual = Manual(
@@ -507,7 +512,9 @@ class Manual(object):
     :raises: **IOError** if unable to retrieve the manual
     """
 
-    man_cmd = 'man %s -P cat %s' % ('--encoding=ascii' if HAS_ENCODING_ARG else '', man_path)
+    man_cmd = (
+        f"man {'--encoding=ascii' if HAS_ENCODING_ARG else ''} -P cat {man_path}"
+    )
 
     try:
       man_output = stem.util.system.call(man_cmd, env = {'MANWIDTH': '10000000'})
@@ -595,7 +602,7 @@ class Manual(object):
       raise ImportError('Saving a sqlite cache requires the sqlite3 module')
 
     import sqlite3
-    tmp_path = path + '.new'
+    tmp_path = f'{path}.new'
 
     if os.path.exists(tmp_path):
       os.remove(tmp_path)
@@ -636,20 +643,20 @@ class Manual(object):
       conf.set('stem_commit', self.stem_commit)
 
     for k, v in self.commandline_options.items():
-      conf.set('commandline_options', '%s => %s' % (k, v), overwrite = False)
+      conf.set('commandline_options', f'{k} => {v}', overwrite = False)
 
     for k, v in self.signals.items():
-      conf.set('signals', '%s => %s' % (k, v), overwrite = False)
+      conf.set('signals', f'{k} => {v}', overwrite = False)
 
     for k, v in self.files.items():
-      conf.set('files', '%s => %s' % (k, v), overwrite = False)
+      conf.set('files', f'{k} => {v}', overwrite = False)
 
     for k, v in self.config_options.items():
-      conf.set('config_options.%s.category' % k, v.category)
-      conf.set('config_options.%s.name' % k, v.name)
-      conf.set('config_options.%s.usage' % k, v.usage)
-      conf.set('config_options.%s.summary' % k, v.summary)
-      conf.set('config_options.%s.description' % k, v.description)
+      conf.set(f'config_options.{k}.category', v.category)
+      conf.set(f'config_options.{k}.name', v.name)
+      conf.set(f'config_options.{k}.usage', v.usage)
+      conf.set(f'config_options.{k}.summary', v.summary)
+      conf.set(f'config_options.{k}.description', v.description)
 
     conf.save(path)
 
@@ -758,16 +765,10 @@ def _add_config_options(config_options, category, lines):
 
   last_option, usage, description = None, None, []
 
-  # Drop the section description. Each ends with a paragraph saying 'The
-  # following options...'.
-
-  desc_paragraph_index = None
-
-  for i, line in enumerate(lines):
-    if 'The following options' in line:
-      desc_paragraph_index = i
-      break
-
+  desc_paragraph_index = next(
+      (i for i, line in enumerate(lines) if 'The following options' in line),
+      None,
+  )
   if desc_paragraph_index is not None:
     lines = lines[desc_paragraph_index:]  # trim to the description paragrah
     lines = lines[lines.index(''):]  # drop the paragraph
@@ -775,14 +776,10 @@ def _add_config_options(config_options, category, lines):
   for line in lines:
     if line and not line.startswith(' '):
       if last_option:
-        summary = _config().get('manual.summary.%s' % last_option.lower(), '')
+        summary = _config().get(f'manual.summary.{last_option.lower()}', '')
         config_options[last_option] = ConfigOption(last_option, category, usage, summary, _join_lines(description).strip())
 
-      if ' ' in line:
-        last_option, usage = line.split(' ', 1)
-      else:
-        last_option, usage = line, ''
-
+      last_option, usage = line.split(' ', 1) if ' ' in line else (line, '')
       description = []
     else:
       if line.startswith('    '):
@@ -791,7 +788,7 @@ def _add_config_options(config_options, category, lines):
       description.append(line)
 
   if last_option:
-    summary = _config().get('manual.summary.%s' % last_option.lower(), '')
+    summary = _config().get(f'manual.summary.{last_option.lower()}', '')
     config_options[last_option] = ConfigOption(last_option, category, usage, summary, _join_lines(description).strip())
 
 
@@ -803,10 +800,9 @@ def _join_lines(lines):
   result = []
 
   for line in lines:
-    if not line:
-      if result and result[-1] != '\n':
-        result.append('\n')
-    else:
+    if line:
       result.append(line + '\n')
 
+    elif result and result[-1] != '\n':
+      result.append('\n')
   return ''.join(result).strip()

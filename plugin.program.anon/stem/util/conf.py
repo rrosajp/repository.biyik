@@ -187,9 +187,7 @@ class _SyncListener(object):
         return  # no change
 
       if self.interceptor:
-        interceptor_value = self.interceptor(key, new_value)
-
-        if interceptor_value:
+        if interceptor_value := self.interceptor(key, new_value):
           new_value = interceptor_value
 
       self.config_dict[key] = new_value
@@ -520,10 +518,7 @@ class Config(object):
         if comment_start != -1:
           line = line[:comment_start]
 
-        line = line.strip()
-
-        # parse the key/value pair
-        if line:
+        if line := line.strip():
           if ' ' in line:
             key, value = line.split(' ', 1)
             self.set(key, value.strip(), False)
@@ -645,8 +640,6 @@ class Config(object):
       if value is None:
         if overwrite and key in self._contents:
           del self._contents[key]
-        else:
-          pass  # no value so this is a no-op
       elif isinstance(value, (bytes, unicode_type)):
         if not overwrite and key in self._contents:
           self._contents[key].append(value)
@@ -763,12 +756,9 @@ class Config(object):
       if key in self._contents:
         self._requested_keys.add(key)
 
-        if multiple:
-          return self._contents[key]
-        else:
-          return self._contents[key][-1]
+        return self._contents[key] if multiple else self._contents[key][-1]
       else:
-        message_id = 'stem.util.conf.missing_config_key_%s' % key
+        message_id = f'stem.util.conf.missing_config_key_{key}'
         log.log_once(message_id, log.TRACE, "config entry '%s' not found, defaulting to '%s'" % (key, default))
         return default
 
