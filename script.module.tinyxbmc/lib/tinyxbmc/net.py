@@ -40,6 +40,7 @@ __profile = addon.get_commondir()
 __cache = Cache(const.HTTPCACHEHAY)
 
 sessions = {}
+SOLVER = flare.Proxy("tinyxbmc")
 
 
 def loadcookies():
@@ -48,7 +49,7 @@ def loadcookies():
     try:
         if not os.path.exists(cpath):
             cookie.save()
-        cookie.load()
+        cookie.load(ignore_discard=True)
     except Exception:
         pass
     return cookie
@@ -165,10 +166,11 @@ def http(url, params=None, data=None, headers=None, timeout=5, json=None, method
               }
     session = getsession(cache)
     response = session.request(method, url, **kwargs)
-    flarecookies = flare.cookies(response)
-    if flarecookies:
-        for flarecookie in flarecookies:
-            session.cookies.set_cookie(flarecookie)
+    session.cookies.save(ignore_discard=True)
+    if SOLVER.check_cf(response):
+        with SOLVER as s:
+            for flarecookie in s.cookies(response.request.url, True):
+                session.cookies.set_cookie(flarecookie)
         response = session.request(method, url, **kwargs)
     session.cookies.save(ignore_discard=True)
     if not text:

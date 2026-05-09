@@ -28,45 +28,68 @@ PORT = 8191
 TIMEOUT = 60 * 1000
 
 
-def proxyget(url):
-    headers = {"Content-Type": "application/json"}
-    data = {
-        "cmd": "request.get",
-        "url": url,
-        "maxTimeout": TIMEOUT
-    }
-    return requests.post(f"http://localhost:{PORT}/v1",
-                         headers=headers, json=data).json()
+class Proxy:
+
+    @staticmethod
+    def call(cmd, error, **args):
+        args["cmd"] = cmd
+        answer = requests.post(f"http://localhost:{PORT}/v1", json=args).json()
+        if error and not answer["status"] == "ok":
+            raise RuntimeError(answer["message"])
+        return answer
+
+    def __init__(self, session=None, timeout=TIMEOUT):
+        self.session = session
+        self.timeout = timeout
+
+    def __enter__(self):
+        if self.session:
+            Proxy.call("sessions.create", True, session=self.session)
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if self.session:
+            Proxy.call("sessions.destroy", True, session=self.session)
+
+    def query(self, url, notify=False):
+        if notify:
+            gui.notify("Cloudflare", f"{url} solving challange", sound=False)
+        answer = Proxy.call("request.get", False, url=url, maxTimeout=self.timeout)
+        if notify:
+            gui.notify("Cloudflare", f"{url} {answer['status']} {answer['message']}", sound=False)
+        return answer
+
+    def get(self, url, notify=False):
+        answer = self.query(url, notify)
+        return answer["solution"]["response"]
+
+    def cookies(self, url, notify=False):
+        answer = self.query(url, notify)
+        for cookie in answer.get("solution", {}).get("cookies", []):
+            yield Cookie(0, cookie["name"], cookie["value"],
+                         None, False,
+                         cookie["domain"], True, cookie["domain"].startswith("."),
+                         cookie["path"], True,
+                         cookie.get("secure", False),
+                         cookie.get("expiry"),
+                         False, None, None, {})
+
+    def check_cf(self, resp):
+        if not resp.status_code == 403:
+            return
+        if not resp.headers.get("server") == "cloudflare":
+            return
+        if not resp.headers.get("cf-mitigated") == "challenge":
+            return
+        return True
 
 
 def getuseragent(default):
     try:
-        js = proxyget(f"http://localhost:{PORT}/v1")
+        js = Proxy.call("request.get", False, url=f"http://localhost:{PORT}/v1")
     except Exception:
         return default
     return js.get("solution", {}).get("userAgent") or default
-
-
-def cookies(resp):
-    if not resp.status_code == 403:
-        return
-    if not resp.headers.get("server") == "cloudflare":
-        return
-    if not resp.headers.get("cf-mitigated") == "challenge":
-        return
-    gui.notify("Cloudflare", f"{resp.request.url} solving challange", sound=False)
-    answer = proxyget(resp.request.url)
-    gui.notify("Cloudflare", f"{resp.request.url} {answer['status']} {answer['message']}", sound=False)
-    cookies = []
-    for cookie in answer.get("solution", {}).get("cookies", []):
-        cookies.append(Cookie(0, cookie["name"], cookie["value"],
-                              None, False,
-                              cookie["domain"], True, cookie["domain"].startswith("."),
-                              cookie["path"], True,
-                              cookie.get("secure", False),
-                              cookie.get("expiry"),
-                              False, None, None, {}))
-    return cookies
 
 
 with hay.stack(const.FLAREHAY) as stack:
